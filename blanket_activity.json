@@ -1,0 +1,3953 @@
+{
+  "generated_at": "2026-03-01T22:54:27.984711",
+  "cameras": [
+    {
+      "camera": "ch19",
+      "source": "/Users/sai/Downloads/NVR_ch19_main_20260227110000_20260227110008.mp4",
+      "video_info": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 25.02,
+        "total_frames": 164,
+        "duration_sec": 6.556
+      },
+      "zone_config": [
+        {
+          "name": "Cutting Table",
+          "rect": [
+            350,
+            100,
+            900,
+            380
+          ],
+          "threshold": 0.04
+        },
+        {
+          "name": "Left Sorting Worker",
+          "rect": [
+            0,
+            580,
+            450,
+            800
+          ],
+          "threshold": 0.03
+        },
+        {
+          "name": "Right Pile Area",
+          "rect": [
+            800,
+            300,
+            1300,
+            700
+          ],
+          "threshold": 0.03
+        }
+      ],
+      "frames_processed": 164,
+      "blankets_counted": {
+        "Cutting Table": 2,
+        "Left Sorting Worker": 1,
+        "Right Pile Area": 1
+      },
+      "total_events": 4,
+      "events": [
+        {
+          "time_sec": 0.0,
+          "frame": 0,
+          "camera": "ch19",
+          "zone": "Cutting Table",
+          "activity": 1.0,
+          "cumulative_count": 1
+        },
+        {
+          "time_sec": 0.0,
+          "frame": 0,
+          "camera": "ch19",
+          "zone": "Left Sorting Worker",
+          "activity": 1.0,
+          "cumulative_count": 1
+        },
+        {
+          "time_sec": 0.0,
+          "frame": 0,
+          "camera": "ch19",
+          "zone": "Right Pile Area",
+          "activity": 1.0,
+          "cumulative_count": 1
+        },
+        {
+          "time_sec": 5.637,
+          "frame": 141,
+          "camera": "ch19",
+          "zone": "Cutting Table",
+          "activity": 0.04368,
+          "cumulative_count": 2
+        }
+      ],
+      "frames": [
+        {
+          "frame": 0,
+          "time_sec": 0.0,
+          "global_activity": 1.0,
+          "zones": {
+            "Cutting Table": 1.0,
+            "Left Sorting Worker": 1.0,
+            "Right Pile Area": 1.0
+          }
+        },
+        {
+          "frame": 1,
+          "time_sec": 0.04,
+          "global_activity": 0.01579,
+          "zones": {
+            "Cutting Table": 0.04989,
+            "Left Sorting Worker": 0.00443,
+            "Right Pile Area": 0.0354
+          }
+        },
+        {
+          "frame": 2,
+          "time_sec": 0.08,
+          "global_activity": 0.00919,
+          "zones": {
+            "Cutting Table": 0.01636,
+            "Left Sorting Worker": 0.00171,
+            "Right Pile Area": 0.02985
+          }
+        },
+        {
+          "frame": 3,
+          "time_sec": 0.12,
+          "global_activity": 0.00307,
+          "zones": {
+            "Cutting Table": 0.00555,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.01631
+          }
+        },
+        {
+          "frame": 4,
+          "time_sec": 0.16,
+          "global_activity": 0.01247,
+          "zones": {
+            "Cutting Table": 0.01691,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.04466
+          }
+        },
+        {
+          "frame": 5,
+          "time_sec": 0.2,
+          "global_activity": 0.00218,
+          "zones": {
+            "Cutting Table": 0.01124,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00886
+          }
+        },
+        {
+          "frame": 6,
+          "time_sec": 0.24,
+          "global_activity": 0.00146,
+          "zones": {
+            "Cutting Table": 0.00622,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0069
+          }
+        },
+        {
+          "frame": 7,
+          "time_sec": 0.28,
+          "global_activity": 0.00302,
+          "zones": {
+            "Cutting Table": 0.00924,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.01008
+          }
+        },
+        {
+          "frame": 8,
+          "time_sec": 0.32,
+          "global_activity": 0.00179,
+          "zones": {
+            "Cutting Table": 0.00285,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00609
+          }
+        },
+        {
+          "frame": 9,
+          "time_sec": 0.36,
+          "global_activity": 0.00114,
+          "zones": {
+            "Cutting Table": 0.00618,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00475
+          }
+        },
+        {
+          "frame": 10,
+          "time_sec": 0.4,
+          "global_activity": 0.00415,
+          "zones": {
+            "Cutting Table": 0.02235,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00892
+          }
+        },
+        {
+          "frame": 11,
+          "time_sec": 0.44,
+          "global_activity": 0.00241,
+          "zones": {
+            "Cutting Table": 0.00922,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00614
+          }
+        },
+        {
+          "frame": 12,
+          "time_sec": 0.48,
+          "global_activity": 0.00282,
+          "zones": {
+            "Cutting Table": 0.01468,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00705
+          }
+        },
+        {
+          "frame": 13,
+          "time_sec": 0.52,
+          "global_activity": 0.00234,
+          "zones": {
+            "Cutting Table": 0.00668,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00556
+          }
+        },
+        {
+          "frame": 14,
+          "time_sec": 0.56,
+          "global_activity": 0.00155,
+          "zones": {
+            "Cutting Table": 0.00835,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00551
+          }
+        },
+        {
+          "frame": 15,
+          "time_sec": 0.6,
+          "global_activity": 0.0035,
+          "zones": {
+            "Cutting Table": 0.01672,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00893
+          }
+        },
+        {
+          "frame": 16,
+          "time_sec": 0.64,
+          "global_activity": 0.00644,
+          "zones": {
+            "Cutting Table": 0.0347,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.01155
+          }
+        },
+        {
+          "frame": 17,
+          "time_sec": 0.68,
+          "global_activity": 0.01239,
+          "zones": {
+            "Cutting Table": 0.04292,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.02922
+          }
+        },
+        {
+          "frame": 18,
+          "time_sec": 0.72,
+          "global_activity": 0.00544,
+          "zones": {
+            "Cutting Table": 0.02933,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.01046
+          }
+        },
+        {
+          "frame": 19,
+          "time_sec": 0.76,
+          "global_activity": 0.00538,
+          "zones": {
+            "Cutting Table": 0.02382,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.01081
+          }
+        },
+        {
+          "frame": 20,
+          "time_sec": 0.8,
+          "global_activity": 0.00609,
+          "zones": {
+            "Cutting Table": 0.02672,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.01286
+          }
+        },
+        {
+          "frame": 21,
+          "time_sec": 0.839,
+          "global_activity": 0.00708,
+          "zones": {
+            "Cutting Table": 0.03994,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0099
+          }
+        },
+        {
+          "frame": 22,
+          "time_sec": 0.879,
+          "global_activity": 0.00701,
+          "zones": {
+            "Cutting Table": 0.04236,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00951
+          }
+        },
+        {
+          "frame": 23,
+          "time_sec": 0.919,
+          "global_activity": 0.00619,
+          "zones": {
+            "Cutting Table": 0.04138,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00679
+          }
+        },
+        {
+          "frame": 24,
+          "time_sec": 0.959,
+          "global_activity": 0.00673,
+          "zones": {
+            "Cutting Table": 0.04636,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00394
+          }
+        },
+        {
+          "frame": 25,
+          "time_sec": 0.999,
+          "global_activity": 0.00807,
+          "zones": {
+            "Cutting Table": 0.05302,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00321
+          }
+        },
+        {
+          "frame": 26,
+          "time_sec": 1.039,
+          "global_activity": 0.00804,
+          "zones": {
+            "Cutting Table": 0.05386,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00228
+          }
+        },
+        {
+          "frame": 27,
+          "time_sec": 1.079,
+          "global_activity": 0.0087,
+          "zones": {
+            "Cutting Table": 0.0564,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00099
+          }
+        },
+        {
+          "frame": 28,
+          "time_sec": 1.119,
+          "global_activity": 0.00807,
+          "zones": {
+            "Cutting Table": 0.05395,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00169
+          }
+        },
+        {
+          "frame": 29,
+          "time_sec": 1.159,
+          "global_activity": 0.00753,
+          "zones": {
+            "Cutting Table": 0.05108,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00298
+          }
+        },
+        {
+          "frame": 30,
+          "time_sec": 1.199,
+          "global_activity": 0.00899,
+          "zones": {
+            "Cutting Table": 0.07225,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0017
+          }
+        },
+        {
+          "frame": 31,
+          "time_sec": 1.239,
+          "global_activity": 0.00888,
+          "zones": {
+            "Cutting Table": 0.0719,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0006
+          }
+        },
+        {
+          "frame": 32,
+          "time_sec": 1.279,
+          "global_activity": 0.00883,
+          "zones": {
+            "Cutting Table": 0.07407,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00052
+          }
+        },
+        {
+          "frame": 33,
+          "time_sec": 1.319,
+          "global_activity": 0.01027,
+          "zones": {
+            "Cutting Table": 0.07635,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00052
+          }
+        },
+        {
+          "frame": 34,
+          "time_sec": 1.359,
+          "global_activity": 0.0108,
+          "zones": {
+            "Cutting Table": 0.07567,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00145
+          }
+        },
+        {
+          "frame": 35,
+          "time_sec": 1.399,
+          "global_activity": 0.01068,
+          "zones": {
+            "Cutting Table": 0.06862,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00063
+          }
+        },
+        {
+          "frame": 36,
+          "time_sec": 1.439,
+          "global_activity": 0.01072,
+          "zones": {
+            "Cutting Table": 0.06808,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00268
+          }
+        },
+        {
+          "frame": 37,
+          "time_sec": 1.479,
+          "global_activity": 0.01058,
+          "zones": {
+            "Cutting Table": 0.05722,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00085
+          }
+        },
+        {
+          "frame": 38,
+          "time_sec": 1.519,
+          "global_activity": 0.01148,
+          "zones": {
+            "Cutting Table": 0.0539,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00208
+          }
+        },
+        {
+          "frame": 39,
+          "time_sec": 1.559,
+          "global_activity": 0.01164,
+          "zones": {
+            "Cutting Table": 0.05213,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00188
+          }
+        },
+        {
+          "frame": 40,
+          "time_sec": 1.599,
+          "global_activity": 0.01171,
+          "zones": {
+            "Cutting Table": 0.04807,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00097
+          }
+        },
+        {
+          "frame": 41,
+          "time_sec": 1.639,
+          "global_activity": 0.01233,
+          "zones": {
+            "Cutting Table": 0.04761,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00104
+          }
+        },
+        {
+          "frame": 42,
+          "time_sec": 1.679,
+          "global_activity": 0.01265,
+          "zones": {
+            "Cutting Table": 0.04454,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00353
+          }
+        },
+        {
+          "frame": 43,
+          "time_sec": 1.719,
+          "global_activity": 0.01327,
+          "zones": {
+            "Cutting Table": 0.04119,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00364
+          }
+        },
+        {
+          "frame": 44,
+          "time_sec": 1.759,
+          "global_activity": 0.01189,
+          "zones": {
+            "Cutting Table": 0.03338,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00091
+          }
+        },
+        {
+          "frame": 45,
+          "time_sec": 1.799,
+          "global_activity": 0.01186,
+          "zones": {
+            "Cutting Table": 0.02762,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00176
+          }
+        },
+        {
+          "frame": 46,
+          "time_sec": 1.839,
+          "global_activity": 0.01164,
+          "zones": {
+            "Cutting Table": 0.02566,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00091
+          }
+        },
+        {
+          "frame": 47,
+          "time_sec": 1.879,
+          "global_activity": 0.01216,
+          "zones": {
+            "Cutting Table": 0.02656,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00091
+          }
+        },
+        {
+          "frame": 48,
+          "time_sec": 1.919,
+          "global_activity": 0.01226,
+          "zones": {
+            "Cutting Table": 0.02442,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 49,
+          "time_sec": 1.959,
+          "global_activity": 0.01227,
+          "zones": {
+            "Cutting Table": 0.02298,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 50,
+          "time_sec": 1.999,
+          "global_activity": 0.01551,
+          "zones": {
+            "Cutting Table": 0.02785,
+            "Left Sorting Worker": 0.00184,
+            "Right Pile Area": 0.00136
+          }
+        },
+        {
+          "frame": 51,
+          "time_sec": 2.039,
+          "global_activity": 0.0147,
+          "zones": {
+            "Cutting Table": 0.02369,
+            "Left Sorting Worker": 0.00184,
+            "Right Pile Area": 0.00085
+          }
+        },
+        {
+          "frame": 52,
+          "time_sec": 2.079,
+          "global_activity": 0.01421,
+          "zones": {
+            "Cutting Table": 0.02194,
+            "Left Sorting Worker": 0.00184,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 53,
+          "time_sec": 2.119,
+          "global_activity": 0.01377,
+          "zones": {
+            "Cutting Table": 0.01909,
+            "Left Sorting Worker": 0.00184,
+            "Right Pile Area": 0.00085
+          }
+        },
+        {
+          "frame": 54,
+          "time_sec": 2.159,
+          "global_activity": 0.01307,
+          "zones": {
+            "Cutting Table": 0.01864,
+            "Left Sorting Worker": 0.00184,
+            "Right Pile Area": 0.00085
+          }
+        },
+        {
+          "frame": 55,
+          "time_sec": 2.199,
+          "global_activity": 0.0121,
+          "zones": {
+            "Cutting Table": 0.01679,
+            "Left Sorting Worker": 0.00184,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 56,
+          "time_sec": 2.239,
+          "global_activity": 0.01196,
+          "zones": {
+            "Cutting Table": 0.01574,
+            "Left Sorting Worker": 0.00452,
+            "Right Pile Area": 0.00098
+          }
+        },
+        {
+          "frame": 57,
+          "time_sec": 2.279,
+          "global_activity": 0.0114,
+          "zones": {
+            "Cutting Table": 0.0129,
+            "Left Sorting Worker": 0.00479,
+            "Right Pile Area": 0.00052
+          }
+        },
+        {
+          "frame": 58,
+          "time_sec": 2.319,
+          "global_activity": 0.01145,
+          "zones": {
+            "Cutting Table": 0.01288,
+            "Left Sorting Worker": 0.00437,
+            "Right Pile Area": 0.00052
+          }
+        },
+        {
+          "frame": 59,
+          "time_sec": 2.359,
+          "global_activity": 0.01115,
+          "zones": {
+            "Cutting Table": 0.00988,
+            "Left Sorting Worker": 0.0024,
+            "Right Pile Area": 0.0006
+          }
+        },
+        {
+          "frame": 60,
+          "time_sec": 2.399,
+          "global_activity": 0.00905,
+          "zones": {
+            "Cutting Table": 0.00668,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 61,
+          "time_sec": 2.439,
+          "global_activity": 0.0086,
+          "zones": {
+            "Cutting Table": 0.00736,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 62,
+          "time_sec": 2.478,
+          "global_activity": 0.00885,
+          "zones": {
+            "Cutting Table": 0.01171,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 63,
+          "time_sec": 2.518,
+          "global_activity": 0.00811,
+          "zones": {
+            "Cutting Table": 0.00868,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 64,
+          "time_sec": 2.558,
+          "global_activity": 0.00739,
+          "zones": {
+            "Cutting Table": 0.0136,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 65,
+          "time_sec": 2.598,
+          "global_activity": 0.00638,
+          "zones": {
+            "Cutting Table": 0.00915,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00052
+          }
+        },
+        {
+          "frame": 66,
+          "time_sec": 2.638,
+          "global_activity": 0.00601,
+          "zones": {
+            "Cutting Table": 0.0125,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 67,
+          "time_sec": 2.678,
+          "global_activity": 0.00656,
+          "zones": {
+            "Cutting Table": 0.01051,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 68,
+          "time_sec": 2.718,
+          "global_activity": 0.00589,
+          "zones": {
+            "Cutting Table": 0.01111,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 69,
+          "time_sec": 2.758,
+          "global_activity": 0.00579,
+          "zones": {
+            "Cutting Table": 0.01032,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 70,
+          "time_sec": 2.798,
+          "global_activity": 0.00622,
+          "zones": {
+            "Cutting Table": 0.01354,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 71,
+          "time_sec": 2.838,
+          "global_activity": 0.00628,
+          "zones": {
+            "Cutting Table": 0.02116,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 72,
+          "time_sec": 2.878,
+          "global_activity": 0.00608,
+          "zones": {
+            "Cutting Table": 0.01881,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00032
+          }
+        },
+        {
+          "frame": 73,
+          "time_sec": 2.918,
+          "global_activity": 0.00642,
+          "zones": {
+            "Cutting Table": 0.02622,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00143
+          }
+        },
+        {
+          "frame": 74,
+          "time_sec": 2.958,
+          "global_activity": 0.00674,
+          "zones": {
+            "Cutting Table": 0.02838,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00244
+          }
+        },
+        {
+          "frame": 75,
+          "time_sec": 2.998,
+          "global_activity": 0.00752,
+          "zones": {
+            "Cutting Table": 0.03293,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00334
+          }
+        },
+        {
+          "frame": 76,
+          "time_sec": 3.038,
+          "global_activity": 0.00704,
+          "zones": {
+            "Cutting Table": 0.02845,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00229
+          }
+        },
+        {
+          "frame": 77,
+          "time_sec": 3.078,
+          "global_activity": 0.00719,
+          "zones": {
+            "Cutting Table": 0.02907,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00313
+          }
+        },
+        {
+          "frame": 78,
+          "time_sec": 3.118,
+          "global_activity": 0.00723,
+          "zones": {
+            "Cutting Table": 0.03219,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00337
+          }
+        },
+        {
+          "frame": 79,
+          "time_sec": 3.158,
+          "global_activity": 0.00785,
+          "zones": {
+            "Cutting Table": 0.03555,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00505
+          }
+        },
+        {
+          "frame": 80,
+          "time_sec": 3.198,
+          "global_activity": 0.00815,
+          "zones": {
+            "Cutting Table": 0.03058,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00505
+          }
+        },
+        {
+          "frame": 81,
+          "time_sec": 3.238,
+          "global_activity": 0.00839,
+          "zones": {
+            "Cutting Table": 0.03373,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00479
+          }
+        },
+        {
+          "frame": 82,
+          "time_sec": 3.278,
+          "global_activity": 0.00767,
+          "zones": {
+            "Cutting Table": 0.02763,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00517
+          }
+        },
+        {
+          "frame": 83,
+          "time_sec": 3.318,
+          "global_activity": 0.00748,
+          "zones": {
+            "Cutting Table": 0.02729,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00492
+          }
+        },
+        {
+          "frame": 84,
+          "time_sec": 3.358,
+          "global_activity": 0.00764,
+          "zones": {
+            "Cutting Table": 0.02645,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00545
+          }
+        },
+        {
+          "frame": 85,
+          "time_sec": 3.398,
+          "global_activity": 0.00779,
+          "zones": {
+            "Cutting Table": 0.02607,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00505
+          }
+        },
+        {
+          "frame": 86,
+          "time_sec": 3.438,
+          "global_activity": 0.0072,
+          "zones": {
+            "Cutting Table": 0.0251,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00524
+          }
+        },
+        {
+          "frame": 87,
+          "time_sec": 3.478,
+          "global_activity": 0.00679,
+          "zones": {
+            "Cutting Table": 0.02535,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00543
+          }
+        },
+        {
+          "frame": 88,
+          "time_sec": 3.518,
+          "global_activity": 0.00676,
+          "zones": {
+            "Cutting Table": 0.02655,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0069
+          }
+        },
+        {
+          "frame": 89,
+          "time_sec": 3.558,
+          "global_activity": 0.00672,
+          "zones": {
+            "Cutting Table": 0.02089,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00783
+          }
+        },
+        {
+          "frame": 90,
+          "time_sec": 3.598,
+          "global_activity": 0.00701,
+          "zones": {
+            "Cutting Table": 0.02293,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00885
+          }
+        },
+        {
+          "frame": 91,
+          "time_sec": 3.638,
+          "global_activity": 0.0077,
+          "zones": {
+            "Cutting Table": 0.02477,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00585
+          }
+        },
+        {
+          "frame": 92,
+          "time_sec": 3.678,
+          "global_activity": 0.00854,
+          "zones": {
+            "Cutting Table": 0.02264,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00938
+          }
+        },
+        {
+          "frame": 93,
+          "time_sec": 3.718,
+          "global_activity": 0.00896,
+          "zones": {
+            "Cutting Table": 0.02362,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00926
+          }
+        },
+        {
+          "frame": 94,
+          "time_sec": 3.758,
+          "global_activity": 0.00904,
+          "zones": {
+            "Cutting Table": 0.02058,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00839
+          }
+        },
+        {
+          "frame": 95,
+          "time_sec": 3.798,
+          "global_activity": 0.00969,
+          "zones": {
+            "Cutting Table": 0.02626,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0081
+          }
+        },
+        {
+          "frame": 96,
+          "time_sec": 3.838,
+          "global_activity": 0.01034,
+          "zones": {
+            "Cutting Table": 0.02493,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00979
+          }
+        },
+        {
+          "frame": 97,
+          "time_sec": 3.878,
+          "global_activity": 0.00973,
+          "zones": {
+            "Cutting Table": 0.02416,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00705
+          }
+        },
+        {
+          "frame": 98,
+          "time_sec": 3.918,
+          "global_activity": 0.0098,
+          "zones": {
+            "Cutting Table": 0.02323,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00679
+          }
+        },
+        {
+          "frame": 99,
+          "time_sec": 3.958,
+          "global_activity": 0.00994,
+          "zones": {
+            "Cutting Table": 0.02169,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0063
+          }
+        },
+        {
+          "frame": 100,
+          "time_sec": 3.998,
+          "global_activity": 0.01004,
+          "zones": {
+            "Cutting Table": 0.02148,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00523
+          }
+        },
+        {
+          "frame": 101,
+          "time_sec": 4.038,
+          "global_activity": 0.01081,
+          "zones": {
+            "Cutting Table": 0.02631,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00532
+          }
+        },
+        {
+          "frame": 102,
+          "time_sec": 4.078,
+          "global_activity": 0.01085,
+          "zones": {
+            "Cutting Table": 0.02513,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00581
+          }
+        },
+        {
+          "frame": 103,
+          "time_sec": 4.117,
+          "global_activity": 0.0111,
+          "zones": {
+            "Cutting Table": 0.02716,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00481
+          }
+        },
+        {
+          "frame": 104,
+          "time_sec": 4.157,
+          "global_activity": 0.01056,
+          "zones": {
+            "Cutting Table": 0.02473,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00369
+          }
+        },
+        {
+          "frame": 105,
+          "time_sec": 4.197,
+          "global_activity": 0.01001,
+          "zones": {
+            "Cutting Table": 0.02569,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00478
+          }
+        },
+        {
+          "frame": 106,
+          "time_sec": 4.237,
+          "global_activity": 0.00991,
+          "zones": {
+            "Cutting Table": 0.02419,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00434
+          }
+        },
+        {
+          "frame": 107,
+          "time_sec": 4.277,
+          "global_activity": 0.01016,
+          "zones": {
+            "Cutting Table": 0.02514,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00585
+          }
+        },
+        {
+          "frame": 108,
+          "time_sec": 4.317,
+          "global_activity": 0.0102,
+          "zones": {
+            "Cutting Table": 0.0255,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00496
+          }
+        },
+        {
+          "frame": 109,
+          "time_sec": 4.357,
+          "global_activity": 0.00945,
+          "zones": {
+            "Cutting Table": 0.02096,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00441
+          }
+        },
+        {
+          "frame": 110,
+          "time_sec": 4.397,
+          "global_activity": 0.00853,
+          "zones": {
+            "Cutting Table": 0.01261,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00536
+          }
+        },
+        {
+          "frame": 111,
+          "time_sec": 4.437,
+          "global_activity": 0.00789,
+          "zones": {
+            "Cutting Table": 0.01452,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00756
+          }
+        },
+        {
+          "frame": 112,
+          "time_sec": 4.477,
+          "global_activity": 0.00779,
+          "zones": {
+            "Cutting Table": 0.01912,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00743
+          }
+        },
+        {
+          "frame": 113,
+          "time_sec": 4.517,
+          "global_activity": 0.00834,
+          "zones": {
+            "Cutting Table": 0.01792,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00629
+          }
+        },
+        {
+          "frame": 114,
+          "time_sec": 4.557,
+          "global_activity": 0.00864,
+          "zones": {
+            "Cutting Table": 0.01586,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00556
+          }
+        },
+        {
+          "frame": 115,
+          "time_sec": 4.597,
+          "global_activity": 0.01114,
+          "zones": {
+            "Cutting Table": 0.01506,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00679
+          }
+        },
+        {
+          "frame": 116,
+          "time_sec": 4.637,
+          "global_activity": 0.01175,
+          "zones": {
+            "Cutting Table": 0.01623,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00785
+          }
+        },
+        {
+          "frame": 117,
+          "time_sec": 4.677,
+          "global_activity": 0.01188,
+          "zones": {
+            "Cutting Table": 0.01342,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00919
+          }
+        },
+        {
+          "frame": 118,
+          "time_sec": 4.717,
+          "global_activity": 0.01215,
+          "zones": {
+            "Cutting Table": 0.01508,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00992
+          }
+        },
+        {
+          "frame": 119,
+          "time_sec": 4.757,
+          "global_activity": 0.01283,
+          "zones": {
+            "Cutting Table": 0.01238,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00826
+          }
+        },
+        {
+          "frame": 120,
+          "time_sec": 4.797,
+          "global_activity": 0.01446,
+          "zones": {
+            "Cutting Table": 0.01484,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00833
+          }
+        },
+        {
+          "frame": 121,
+          "time_sec": 4.837,
+          "global_activity": 0.01486,
+          "zones": {
+            "Cutting Table": 0.01834,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00808
+          }
+        },
+        {
+          "frame": 122,
+          "time_sec": 4.877,
+          "global_activity": 0.016,
+          "zones": {
+            "Cutting Table": 0.02056,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00713
+          }
+        },
+        {
+          "frame": 123,
+          "time_sec": 4.917,
+          "global_activity": 0.01697,
+          "zones": {
+            "Cutting Table": 0.02237,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00572
+          }
+        },
+        {
+          "frame": 124,
+          "time_sec": 4.957,
+          "global_activity": 0.01683,
+          "zones": {
+            "Cutting Table": 0.02475,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00511
+          }
+        },
+        {
+          "frame": 125,
+          "time_sec": 4.997,
+          "global_activity": 0.01607,
+          "zones": {
+            "Cutting Table": 0.02322,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00572
+          }
+        },
+        {
+          "frame": 126,
+          "time_sec": 5.037,
+          "global_activity": 0.01565,
+          "zones": {
+            "Cutting Table": 0.02279,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00656
+          }
+        },
+        {
+          "frame": 127,
+          "time_sec": 5.077,
+          "global_activity": 0.01523,
+          "zones": {
+            "Cutting Table": 0.02173,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0065
+          }
+        },
+        {
+          "frame": 128,
+          "time_sec": 5.117,
+          "global_activity": 0.01431,
+          "zones": {
+            "Cutting Table": 0.02301,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00554
+          }
+        },
+        {
+          "frame": 129,
+          "time_sec": 5.157,
+          "global_activity": 0.01345,
+          "zones": {
+            "Cutting Table": 0.02516,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00357
+          }
+        },
+        {
+          "frame": 130,
+          "time_sec": 5.197,
+          "global_activity": 0.01267,
+          "zones": {
+            "Cutting Table": 0.02434,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0022
+          }
+        },
+        {
+          "frame": 131,
+          "time_sec": 5.237,
+          "global_activity": 0.0126,
+          "zones": {
+            "Cutting Table": 0.02455,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00296
+          }
+        },
+        {
+          "frame": 132,
+          "time_sec": 5.277,
+          "global_activity": 0.01264,
+          "zones": {
+            "Cutting Table": 0.02654,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00254
+          }
+        },
+        {
+          "frame": 133,
+          "time_sec": 5.317,
+          "global_activity": 0.0138,
+          "zones": {
+            "Cutting Table": 0.02619,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00238
+          }
+        },
+        {
+          "frame": 134,
+          "time_sec": 5.357,
+          "global_activity": 0.01782,
+          "zones": {
+            "Cutting Table": 0.03037,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00085
+          }
+        },
+        {
+          "frame": 135,
+          "time_sec": 5.397,
+          "global_activity": 0.01942,
+          "zones": {
+            "Cutting Table": 0.03149,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 136,
+          "time_sec": 5.437,
+          "global_activity": 0.02227,
+          "zones": {
+            "Cutting Table": 0.03149,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0
+          }
+        },
+        {
+          "frame": 137,
+          "time_sec": 5.477,
+          "global_activity": 0.02369,
+          "zones": {
+            "Cutting Table": 0.03321,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00098
+          }
+        },
+        {
+          "frame": 138,
+          "time_sec": 5.517,
+          "global_activity": 0.02621,
+          "zones": {
+            "Cutting Table": 0.03412,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00229
+          }
+        },
+        {
+          "frame": 139,
+          "time_sec": 5.557,
+          "global_activity": 0.02712,
+          "zones": {
+            "Cutting Table": 0.03688,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00085
+          }
+        },
+        {
+          "frame": 140,
+          "time_sec": 5.597,
+          "global_activity": 0.02724,
+          "zones": {
+            "Cutting Table": 0.03799,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00115
+          }
+        },
+        {
+          "frame": 141,
+          "time_sec": 5.637,
+          "global_activity": 0.02432,
+          "zones": {
+            "Cutting Table": 0.04368,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00143
+          }
+        },
+        {
+          "frame": 142,
+          "time_sec": 5.677,
+          "global_activity": 0.02454,
+          "zones": {
+            "Cutting Table": 0.05033,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0011
+          }
+        },
+        {
+          "frame": 143,
+          "time_sec": 5.717,
+          "global_activity": 0.02488,
+          "zones": {
+            "Cutting Table": 0.05745,
+            "Left Sorting Worker": 0.00173,
+            "Right Pile Area": 0.00212
+          }
+        },
+        {
+          "frame": 144,
+          "time_sec": 5.756,
+          "global_activity": 0.02459,
+          "zones": {
+            "Cutting Table": 0.06347,
+            "Left Sorting Worker": 0.0036,
+            "Right Pile Area": 0.00265
+          }
+        },
+        {
+          "frame": 145,
+          "time_sec": 5.796,
+          "global_activity": 0.02651,
+          "zones": {
+            "Cutting Table": 0.07237,
+            "Left Sorting Worker": 0.00849,
+            "Right Pile Area": 0.00174
+          }
+        },
+        {
+          "frame": 146,
+          "time_sec": 5.836,
+          "global_activity": 0.0301,
+          "zones": {
+            "Cutting Table": 0.07875,
+            "Left Sorting Worker": 0.01811,
+            "Right Pile Area": 0.00396
+          }
+        },
+        {
+          "frame": 147,
+          "time_sec": 5.876,
+          "global_activity": 0.03115,
+          "zones": {
+            "Cutting Table": 0.08403,
+            "Left Sorting Worker": 0.01671,
+            "Right Pile Area": 0.00239
+          }
+        },
+        {
+          "frame": 148,
+          "time_sec": 5.916,
+          "global_activity": 0.03144,
+          "zones": {
+            "Cutting Table": 0.08852,
+            "Left Sorting Worker": 0.01995,
+            "Right Pile Area": 0.00139
+          }
+        },
+        {
+          "frame": 149,
+          "time_sec": 5.956,
+          "global_activity": 0.03186,
+          "zones": {
+            "Cutting Table": 0.08419,
+            "Left Sorting Worker": 0.01132,
+            "Right Pile Area": 0.00083
+          }
+        },
+        {
+          "frame": 150,
+          "time_sec": 5.996,
+          "global_activity": 0.03103,
+          "zones": {
+            "Cutting Table": 0.08347,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00272
+          }
+        },
+        {
+          "frame": 151,
+          "time_sec": 6.036,
+          "global_activity": 0.02787,
+          "zones": {
+            "Cutting Table": 0.07708,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00182
+          }
+        },
+        {
+          "frame": 152,
+          "time_sec": 6.076,
+          "global_activity": 0.02791,
+          "zones": {
+            "Cutting Table": 0.07597,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00352
+          }
+        },
+        {
+          "frame": 153,
+          "time_sec": 6.116,
+          "global_activity": 0.02514,
+          "zones": {
+            "Cutting Table": 0.07056,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00417
+          }
+        },
+        {
+          "frame": 154,
+          "time_sec": 6.156,
+          "global_activity": 0.02361,
+          "zones": {
+            "Cutting Table": 0.06794,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0043
+          }
+        },
+        {
+          "frame": 155,
+          "time_sec": 6.196,
+          "global_activity": 0.02123,
+          "zones": {
+            "Cutting Table": 0.06325,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00436
+          }
+        },
+        {
+          "frame": 156,
+          "time_sec": 6.236,
+          "global_activity": 0.01721,
+          "zones": {
+            "Cutting Table": 0.05545,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00752
+          }
+        },
+        {
+          "frame": 157,
+          "time_sec": 6.276,
+          "global_activity": 0.01268,
+          "zones": {
+            "Cutting Table": 0.03677,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.0075
+          }
+        },
+        {
+          "frame": 158,
+          "time_sec": 6.316,
+          "global_activity": 0.01086,
+          "zones": {
+            "Cutting Table": 0.02932,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00581
+          }
+        },
+        {
+          "frame": 159,
+          "time_sec": 6.356,
+          "global_activity": 0.00965,
+          "zones": {
+            "Cutting Table": 0.01803,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00653
+          }
+        },
+        {
+          "frame": 160,
+          "time_sec": 6.396,
+          "global_activity": 0.00932,
+          "zones": {
+            "Cutting Table": 0.01688,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00806
+          }
+        },
+        {
+          "frame": 161,
+          "time_sec": 6.436,
+          "global_activity": 0.00932,
+          "zones": {
+            "Cutting Table": 0.01871,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00887
+          }
+        },
+        {
+          "frame": 162,
+          "time_sec": 6.476,
+          "global_activity": 0.00916,
+          "zones": {
+            "Cutting Table": 0.01636,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00977
+          }
+        },
+        {
+          "frame": 163,
+          "time_sec": 6.516,
+          "global_activity": 0.00864,
+          "zones": {
+            "Cutting Table": 0.01479,
+            "Left Sorting Worker": 0.0,
+            "Right Pile Area": 0.00734
+          }
+        }
+      ]
+    },
+    {
+      "camera": "ch21",
+      "source": "/Users/sai/Downloads/NVR_ch21_main_20260227110000_20260227110009.mp4",
+      "video_info": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 25.01,
+        "total_frames": 209,
+        "duration_sec": 8.355
+      },
+      "zone_config": [
+        {
+          "name": "Weighing Station",
+          "rect": [
+            900,
+            280,
+            1300,
+            680
+          ],
+          "threshold": 0.04
+        },
+        {
+          "name": "Folding Table",
+          "rect": [
+            600,
+            200,
+            1000,
+            500
+          ],
+          "threshold": 0.04
+        },
+        {
+          "name": "Sewing Machines",
+          "rect": [
+            0,
+            0,
+            350,
+            400
+          ],
+          "threshold": 0.03
+        }
+      ],
+      "frames_processed": 209,
+      "blankets_counted": {
+        "Weighing Station": 3,
+        "Folding Table": 1,
+        "Sewing Machines": 3
+      },
+      "total_events": 7,
+      "events": [
+        {
+          "time_sec": 0.0,
+          "frame": 0,
+          "camera": "ch21",
+          "zone": "Weighing Station",
+          "activity": 1.0,
+          "cumulative_count": 1
+        },
+        {
+          "time_sec": 0.0,
+          "frame": 0,
+          "camera": "ch21",
+          "zone": "Folding Table",
+          "activity": 1.0,
+          "cumulative_count": 1
+        },
+        {
+          "time_sec": 0.0,
+          "frame": 0,
+          "camera": "ch21",
+          "zone": "Sewing Machines",
+          "activity": 1.0,
+          "cumulative_count": 1
+        },
+        {
+          "time_sec": 1.999,
+          "frame": 50,
+          "camera": "ch21",
+          "zone": "Sewing Machines",
+          "activity": 0.10261,
+          "cumulative_count": 2
+        },
+        {
+          "time_sec": 2.598,
+          "frame": 65,
+          "camera": "ch21",
+          "zone": "Weighing Station",
+          "activity": 0.05684,
+          "cumulative_count": 2
+        },
+        {
+          "time_sec": 3.998,
+          "frame": 100,
+          "camera": "ch21",
+          "zone": "Sewing Machines",
+          "activity": 0.03586,
+          "cumulative_count": 3
+        },
+        {
+          "time_sec": 7.196,
+          "frame": 180,
+          "camera": "ch21",
+          "zone": "Weighing Station",
+          "activity": 0.04028,
+          "cumulative_count": 3
+        }
+      ],
+      "frames": [
+        {
+          "frame": 0,
+          "time_sec": 0.0,
+          "global_activity": 1.0,
+          "zones": {
+            "Weighing Station": 1.0,
+            "Folding Table": 1.0,
+            "Sewing Machines": 1.0
+          }
+        },
+        {
+          "frame": 1,
+          "time_sec": 0.04,
+          "global_activity": 0.0259,
+          "zones": {
+            "Weighing Station": 0.00855,
+            "Folding Table": 0.00501,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 2,
+          "time_sec": 0.08,
+          "global_activity": 0.02092,
+          "zones": {
+            "Weighing Station": 0.00683,
+            "Folding Table": 0.0005,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 3,
+          "time_sec": 0.12,
+          "global_activity": 0.01901,
+          "zones": {
+            "Weighing Station": 0.00146,
+            "Folding Table": 0.00141,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 4,
+          "time_sec": 0.16,
+          "global_activity": 0.01656,
+          "zones": {
+            "Weighing Station": 0.0,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 5,
+          "time_sec": 0.2,
+          "global_activity": 0.0162,
+          "zones": {
+            "Weighing Station": 0.0,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 6,
+          "time_sec": 0.24,
+          "global_activity": 0.01534,
+          "zones": {
+            "Weighing Station": 0.00317,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 7,
+          "time_sec": 0.28,
+          "global_activity": 0.01366,
+          "zones": {
+            "Weighing Station": 0.01,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 8,
+          "time_sec": 0.32,
+          "global_activity": 0.01681,
+          "zones": {
+            "Weighing Station": 0.04698,
+            "Folding Table": 0.00162,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 9,
+          "time_sec": 0.36,
+          "global_activity": 0.0198,
+          "zones": {
+            "Weighing Station": 0.0953,
+            "Folding Table": 0.00372,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 10,
+          "time_sec": 0.4,
+          "global_activity": 0.02504,
+          "zones": {
+            "Weighing Station": 0.16664,
+            "Folding Table": 0.01043,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 11,
+          "time_sec": 0.44,
+          "global_activity": 0.04262,
+          "zones": {
+            "Weighing Station": 0.23935,
+            "Folding Table": 0.00962,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 12,
+          "time_sec": 0.48,
+          "global_activity": 0.04796,
+          "zones": {
+            "Weighing Station": 0.30406,
+            "Folding Table": 0.00814,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 13,
+          "time_sec": 0.52,
+          "global_activity": 0.04257,
+          "zones": {
+            "Weighing Station": 0.33582,
+            "Folding Table": 0.02291,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 14,
+          "time_sec": 0.56,
+          "global_activity": 0.04599,
+          "zones": {
+            "Weighing Station": 0.34832,
+            "Folding Table": 0.01408,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 15,
+          "time_sec": 0.6,
+          "global_activity": 0.05129,
+          "zones": {
+            "Weighing Station": 0.32772,
+            "Folding Table": 0.02655,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 16,
+          "time_sec": 0.64,
+          "global_activity": 0.05601,
+          "zones": {
+            "Weighing Station": 0.31172,
+            "Folding Table": 0.0199,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 17,
+          "time_sec": 0.68,
+          "global_activity": 0.05724,
+          "zones": {
+            "Weighing Station": 0.29064,
+            "Folding Table": 0.01334,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 18,
+          "time_sec": 0.72,
+          "global_activity": 0.06407,
+          "zones": {
+            "Weighing Station": 0.26856,
+            "Folding Table": 0.00197,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 19,
+          "time_sec": 0.76,
+          "global_activity": 0.06413,
+          "zones": {
+            "Weighing Station": 0.24165,
+            "Folding Table": 0.00111,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 20,
+          "time_sec": 0.8,
+          "global_activity": 0.06583,
+          "zones": {
+            "Weighing Station": 0.236,
+            "Folding Table": 0.00032,
+            "Sewing Machines": 0.0015
+          }
+        },
+        {
+          "frame": 21,
+          "time_sec": 0.839,
+          "global_activity": 0.05994,
+          "zones": {
+            "Weighing Station": 0.21987,
+            "Folding Table": 0.00054,
+            "Sewing Machines": 0.00201
+          }
+        },
+        {
+          "frame": 22,
+          "time_sec": 0.879,
+          "global_activity": 0.05313,
+          "zones": {
+            "Weighing Station": 0.23349,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 23,
+          "time_sec": 0.919,
+          "global_activity": 0.04732,
+          "zones": {
+            "Weighing Station": 0.21699,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00241
+          }
+        },
+        {
+          "frame": 24,
+          "time_sec": 0.959,
+          "global_activity": 0.04538,
+          "zones": {
+            "Weighing Station": 0.18189,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00241
+          }
+        },
+        {
+          "frame": 25,
+          "time_sec": 0.999,
+          "global_activity": 0.04959,
+          "zones": {
+            "Weighing Station": 0.17648,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00241
+          }
+        },
+        {
+          "frame": 26,
+          "time_sec": 1.039,
+          "global_activity": 0.04616,
+          "zones": {
+            "Weighing Station": 0.17625,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00241
+          }
+        },
+        {
+          "frame": 27,
+          "time_sec": 1.079,
+          "global_activity": 0.04261,
+          "zones": {
+            "Weighing Station": 0.17523,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 28,
+          "time_sec": 1.119,
+          "global_activity": 0.04172,
+          "zones": {
+            "Weighing Station": 0.18299,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00139
+          }
+        },
+        {
+          "frame": 29,
+          "time_sec": 1.159,
+          "global_activity": 0.04309,
+          "zones": {
+            "Weighing Station": 0.18424,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 30,
+          "time_sec": 1.199,
+          "global_activity": 0.04221,
+          "zones": {
+            "Weighing Station": 0.18354,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00223
+          }
+        },
+        {
+          "frame": 31,
+          "time_sec": 1.239,
+          "global_activity": 0.04032,
+          "zones": {
+            "Weighing Station": 0.1764,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00534
+          }
+        },
+        {
+          "frame": 32,
+          "time_sec": 1.279,
+          "global_activity": 0.03881,
+          "zones": {
+            "Weighing Station": 0.15821,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0054
+          }
+        },
+        {
+          "frame": 33,
+          "time_sec": 1.319,
+          "global_activity": 0.03656,
+          "zones": {
+            "Weighing Station": 0.13625,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00516
+          }
+        },
+        {
+          "frame": 34,
+          "time_sec": 1.359,
+          "global_activity": 0.03565,
+          "zones": {
+            "Weighing Station": 0.12869,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00338
+          }
+        },
+        {
+          "frame": 35,
+          "time_sec": 1.399,
+          "global_activity": 0.03673,
+          "zones": {
+            "Weighing Station": 0.11309,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00172
+          }
+        },
+        {
+          "frame": 36,
+          "time_sec": 1.439,
+          "global_activity": 0.03777,
+          "zones": {
+            "Weighing Station": 0.10709,
+            "Folding Table": 0.00139,
+            "Sewing Machines": 0.00409
+          }
+        },
+        {
+          "frame": 37,
+          "time_sec": 1.479,
+          "global_activity": 0.0381,
+          "zones": {
+            "Weighing Station": 0.10557,
+            "Folding Table": 0.00139,
+            "Sewing Machines": 0.00419
+          }
+        },
+        {
+          "frame": 38,
+          "time_sec": 1.519,
+          "global_activity": 0.03899,
+          "zones": {
+            "Weighing Station": 0.1144,
+            "Folding Table": 0.00119,
+            "Sewing Machines": 0.00587
+          }
+        },
+        {
+          "frame": 39,
+          "time_sec": 1.559,
+          "global_activity": 0.03816,
+          "zones": {
+            "Weighing Station": 0.13023,
+            "Folding Table": 0.00257,
+            "Sewing Machines": 0.00359
+          }
+        },
+        {
+          "frame": 40,
+          "time_sec": 1.599,
+          "global_activity": 0.04005,
+          "zones": {
+            "Weighing Station": 0.17322,
+            "Folding Table": 0.00119,
+            "Sewing Machines": 0.00302
+          }
+        },
+        {
+          "frame": 41,
+          "time_sec": 1.639,
+          "global_activity": 0.0397,
+          "zones": {
+            "Weighing Station": 0.18879,
+            "Folding Table": 0.00119,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 42,
+          "time_sec": 1.679,
+          "global_activity": 0.0385,
+          "zones": {
+            "Weighing Station": 0.19479,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 43,
+          "time_sec": 1.719,
+          "global_activity": 0.03988,
+          "zones": {
+            "Weighing Station": 0.20346,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00136
+          }
+        },
+        {
+          "frame": 44,
+          "time_sec": 1.759,
+          "global_activity": 0.04131,
+          "zones": {
+            "Weighing Station": 0.20652,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00119
+          }
+        },
+        {
+          "frame": 45,
+          "time_sec": 1.799,
+          "global_activity": 0.04233,
+          "zones": {
+            "Weighing Station": 0.21225,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00119
+          }
+        },
+        {
+          "frame": 46,
+          "time_sec": 1.839,
+          "global_activity": 0.04298,
+          "zones": {
+            "Weighing Station": 0.22846,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 47,
+          "time_sec": 1.879,
+          "global_activity": 0.04424,
+          "zones": {
+            "Weighing Station": 0.22369,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 48,
+          "time_sec": 1.919,
+          "global_activity": 0.04235,
+          "zones": {
+            "Weighing Station": 0.22315,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 49,
+          "time_sec": 1.959,
+          "global_activity": 0.04012,
+          "zones": {
+            "Weighing Station": 0.21305,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00289
+          }
+        },
+        {
+          "frame": 50,
+          "time_sec": 1.999,
+          "global_activity": 0.08108,
+          "zones": {
+            "Weighing Station": 0.21294,
+            "Folding Table": 0.02872,
+            "Sewing Machines": 0.10261
+          }
+        },
+        {
+          "frame": 51,
+          "time_sec": 2.039,
+          "global_activity": 0.07524,
+          "zones": {
+            "Weighing Station": 0.193,
+            "Folding Table": 0.02895,
+            "Sewing Machines": 0.09653
+          }
+        },
+        {
+          "frame": 52,
+          "time_sec": 2.079,
+          "global_activity": 0.07152,
+          "zones": {
+            "Weighing Station": 0.1783,
+            "Folding Table": 0.02895,
+            "Sewing Machines": 0.09415
+          }
+        },
+        {
+          "frame": 53,
+          "time_sec": 2.119,
+          "global_activity": 0.06646,
+          "zones": {
+            "Weighing Station": 0.14813,
+            "Folding Table": 0.02895,
+            "Sewing Machines": 0.09415
+          }
+        },
+        {
+          "frame": 54,
+          "time_sec": 2.159,
+          "global_activity": 0.06354,
+          "zones": {
+            "Weighing Station": 0.14079,
+            "Folding Table": 0.02906,
+            "Sewing Machines": 0.09234
+          }
+        },
+        {
+          "frame": 55,
+          "time_sec": 2.199,
+          "global_activity": 0.05765,
+          "zones": {
+            "Weighing Station": 0.12235,
+            "Folding Table": 0.02884,
+            "Sewing Machines": 0.0946
+          }
+        },
+        {
+          "frame": 56,
+          "time_sec": 2.239,
+          "global_activity": 0.05302,
+          "zones": {
+            "Weighing Station": 0.11119,
+            "Folding Table": 0.02687,
+            "Sewing Machines": 0.09136
+          }
+        },
+        {
+          "frame": 57,
+          "time_sec": 2.279,
+          "global_activity": 0.05221,
+          "zones": {
+            "Weighing Station": 0.11006,
+            "Folding Table": 0.02637,
+            "Sewing Machines": 0.09161
+          }
+        },
+        {
+          "frame": 58,
+          "time_sec": 2.319,
+          "global_activity": 0.04956,
+          "zones": {
+            "Weighing Station": 0.10799,
+            "Folding Table": 0.02254,
+            "Sewing Machines": 0.08708
+          }
+        },
+        {
+          "frame": 59,
+          "time_sec": 2.359,
+          "global_activity": 0.04682,
+          "zones": {
+            "Weighing Station": 0.09114,
+            "Folding Table": 0.0194,
+            "Sewing Machines": 0.07969
+          }
+        },
+        {
+          "frame": 60,
+          "time_sec": 2.399,
+          "global_activity": 0.01536,
+          "zones": {
+            "Weighing Station": 0.07368,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 61,
+          "time_sec": 2.439,
+          "global_activity": 0.01301,
+          "zones": {
+            "Weighing Station": 0.05263,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 62,
+          "time_sec": 2.479,
+          "global_activity": 0.01205,
+          "zones": {
+            "Weighing Station": 0.04387,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 63,
+          "time_sec": 2.518,
+          "global_activity": 0.01101,
+          "zones": {
+            "Weighing Station": 0.03611,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 64,
+          "time_sec": 2.558,
+          "global_activity": 0.01056,
+          "zones": {
+            "Weighing Station": 0.03624,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 65,
+          "time_sec": 2.598,
+          "global_activity": 0.01181,
+          "zones": {
+            "Weighing Station": 0.05684,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 66,
+          "time_sec": 2.638,
+          "global_activity": 0.01487,
+          "zones": {
+            "Weighing Station": 0.09928,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 67,
+          "time_sec": 2.678,
+          "global_activity": 0.01905,
+          "zones": {
+            "Weighing Station": 0.15594,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 68,
+          "time_sec": 2.718,
+          "global_activity": 0.02231,
+          "zones": {
+            "Weighing Station": 0.19173,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 69,
+          "time_sec": 2.758,
+          "global_activity": 0.02275,
+          "zones": {
+            "Weighing Station": 0.20253,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 70,
+          "time_sec": 2.798,
+          "global_activity": 0.02562,
+          "zones": {
+            "Weighing Station": 0.20524,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 71,
+          "time_sec": 2.838,
+          "global_activity": 0.03061,
+          "zones": {
+            "Weighing Station": 0.20946,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 72,
+          "time_sec": 2.878,
+          "global_activity": 0.03159,
+          "zones": {
+            "Weighing Station": 0.2088,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 73,
+          "time_sec": 2.918,
+          "global_activity": 0.03185,
+          "zones": {
+            "Weighing Station": 0.20644,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 74,
+          "time_sec": 2.958,
+          "global_activity": 0.02941,
+          "zones": {
+            "Weighing Station": 0.1997,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 75,
+          "time_sec": 2.998,
+          "global_activity": 0.0269,
+          "zones": {
+            "Weighing Station": 0.18263,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 76,
+          "time_sec": 3.038,
+          "global_activity": 0.02598,
+          "zones": {
+            "Weighing Station": 0.17866,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 77,
+          "time_sec": 3.078,
+          "global_activity": 0.02352,
+          "zones": {
+            "Weighing Station": 0.16617,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0026
+          }
+        },
+        {
+          "frame": 78,
+          "time_sec": 3.118,
+          "global_activity": 0.02245,
+          "zones": {
+            "Weighing Station": 0.15469,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00252
+          }
+        },
+        {
+          "frame": 79,
+          "time_sec": 3.158,
+          "global_activity": 0.02033,
+          "zones": {
+            "Weighing Station": 0.1269,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00261
+          }
+        },
+        {
+          "frame": 80,
+          "time_sec": 3.198,
+          "global_activity": 0.02114,
+          "zones": {
+            "Weighing Station": 0.12248,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00139
+          }
+        },
+        {
+          "frame": 81,
+          "time_sec": 3.238,
+          "global_activity": 0.0222,
+          "zones": {
+            "Weighing Station": 0.13086,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00289
+          }
+        },
+        {
+          "frame": 82,
+          "time_sec": 3.278,
+          "global_activity": 0.02774,
+          "zones": {
+            "Weighing Station": 0.18427,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00149
+          }
+        },
+        {
+          "frame": 83,
+          "time_sec": 3.318,
+          "global_activity": 0.03102,
+          "zones": {
+            "Weighing Station": 0.21664,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 84,
+          "time_sec": 3.358,
+          "global_activity": 0.03627,
+          "zones": {
+            "Weighing Station": 0.23284,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 85,
+          "time_sec": 3.398,
+          "global_activity": 0.04458,
+          "zones": {
+            "Weighing Station": 0.26812,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 86,
+          "time_sec": 3.438,
+          "global_activity": 0.05161,
+          "zones": {
+            "Weighing Station": 0.30665,
+            "Folding Table": 0.01087,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 87,
+          "time_sec": 3.478,
+          "global_activity": 0.05032,
+          "zones": {
+            "Weighing Station": 0.32888,
+            "Folding Table": 0.01082,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 88,
+          "time_sec": 3.518,
+          "global_activity": 0.04345,
+          "zones": {
+            "Weighing Station": 0.32176,
+            "Folding Table": 0.01068,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 89,
+          "time_sec": 3.558,
+          "global_activity": 0.03696,
+          "zones": {
+            "Weighing Station": 0.24885,
+            "Folding Table": 0.00584,
+            "Sewing Machines": 0.00241
+          }
+        },
+        {
+          "frame": 90,
+          "time_sec": 3.598,
+          "global_activity": 0.03362,
+          "zones": {
+            "Weighing Station": 0.23083,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00356
+          }
+        },
+        {
+          "frame": 91,
+          "time_sec": 3.638,
+          "global_activity": 0.0327,
+          "zones": {
+            "Weighing Station": 0.22298,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 92,
+          "time_sec": 3.678,
+          "global_activity": 0.03337,
+          "zones": {
+            "Weighing Station": 0.20734,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00366
+          }
+        },
+        {
+          "frame": 93,
+          "time_sec": 3.718,
+          "global_activity": 0.03801,
+          "zones": {
+            "Weighing Station": 0.22973,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00522
+          }
+        },
+        {
+          "frame": 94,
+          "time_sec": 3.758,
+          "global_activity": 0.04663,
+          "zones": {
+            "Weighing Station": 0.30272,
+            "Folding Table": 0.0092,
+            "Sewing Machines": 0.00519
+          }
+        },
+        {
+          "frame": 95,
+          "time_sec": 3.798,
+          "global_activity": 0.05808,
+          "zones": {
+            "Weighing Station": 0.3892,
+            "Folding Table": 0.01198,
+            "Sewing Machines": 0.00657
+          }
+        },
+        {
+          "frame": 96,
+          "time_sec": 3.838,
+          "global_activity": 0.0607,
+          "zones": {
+            "Weighing Station": 0.39772,
+            "Folding Table": 0.01442,
+            "Sewing Machines": 0.00773
+          }
+        },
+        {
+          "frame": 97,
+          "time_sec": 3.878,
+          "global_activity": 0.0585,
+          "zones": {
+            "Weighing Station": 0.38086,
+            "Folding Table": 0.01333,
+            "Sewing Machines": 0.00739
+          }
+        },
+        {
+          "frame": 98,
+          "time_sec": 3.918,
+          "global_activity": 0.04566,
+          "zones": {
+            "Weighing Station": 0.30199,
+            "Folding Table": 0.00953,
+            "Sewing Machines": 0.00709
+          }
+        },
+        {
+          "frame": 99,
+          "time_sec": 3.958,
+          "global_activity": 0.04218,
+          "zones": {
+            "Weighing Station": 0.29089,
+            "Folding Table": 0.00639,
+            "Sewing Machines": 0.00691
+          }
+        },
+        {
+          "frame": 100,
+          "time_sec": 3.998,
+          "global_activity": 0.04633,
+          "zones": {
+            "Weighing Station": 0.27407,
+            "Folding Table": 0.00238,
+            "Sewing Machines": 0.03586
+          }
+        },
+        {
+          "frame": 101,
+          "time_sec": 4.038,
+          "global_activity": 0.03966,
+          "zones": {
+            "Weighing Station": 0.23287,
+            "Folding Table": 0.00238,
+            "Sewing Machines": 0.02671
+          }
+        },
+        {
+          "frame": 102,
+          "time_sec": 4.078,
+          "global_activity": 0.0395,
+          "zones": {
+            "Weighing Station": 0.22752,
+            "Folding Table": 0.00238,
+            "Sewing Machines": 0.02639
+          }
+        },
+        {
+          "frame": 103,
+          "time_sec": 4.118,
+          "global_activity": 0.03765,
+          "zones": {
+            "Weighing Station": 0.22263,
+            "Folding Table": 0.00338,
+            "Sewing Machines": 0.02549
+          }
+        },
+        {
+          "frame": 104,
+          "time_sec": 4.158,
+          "global_activity": 0.03274,
+          "zones": {
+            "Weighing Station": 0.19589,
+            "Folding Table": 0.00338,
+            "Sewing Machines": 0.02314
+          }
+        },
+        {
+          "frame": 105,
+          "time_sec": 4.197,
+          "global_activity": 0.02818,
+          "zones": {
+            "Weighing Station": 0.16087,
+            "Folding Table": 0.00349,
+            "Sewing Machines": 0.02513
+          }
+        },
+        {
+          "frame": 106,
+          "time_sec": 4.237,
+          "global_activity": 0.02403,
+          "zones": {
+            "Weighing Station": 0.13413,
+            "Folding Table": 0.00349,
+            "Sewing Machines": 0.0206
+          }
+        },
+        {
+          "frame": 107,
+          "time_sec": 4.277,
+          "global_activity": 0.02417,
+          "zones": {
+            "Weighing Station": 0.13986,
+            "Folding Table": 0.00349,
+            "Sewing Machines": 0.01791
+          }
+        },
+        {
+          "frame": 108,
+          "time_sec": 4.317,
+          "global_activity": 0.02339,
+          "zones": {
+            "Weighing Station": 0.14474,
+            "Folding Table": 0.00349,
+            "Sewing Machines": 0.01641
+          }
+        },
+        {
+          "frame": 109,
+          "time_sec": 4.357,
+          "global_activity": 0.02271,
+          "zones": {
+            "Weighing Station": 0.14442,
+            "Folding Table": 0.00349,
+            "Sewing Machines": 0.01441
+          }
+        },
+        {
+          "frame": 110,
+          "time_sec": 4.397,
+          "global_activity": 0.01749,
+          "zones": {
+            "Weighing Station": 0.13732,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00282
+          }
+        },
+        {
+          "frame": 111,
+          "time_sec": 4.437,
+          "global_activity": 0.01925,
+          "zones": {
+            "Weighing Station": 0.14307,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00204
+          }
+        },
+        {
+          "frame": 112,
+          "time_sec": 4.477,
+          "global_activity": 0.01943,
+          "zones": {
+            "Weighing Station": 0.13116,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 113,
+          "time_sec": 4.517,
+          "global_activity": 0.02164,
+          "zones": {
+            "Weighing Station": 0.14684,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 114,
+          "time_sec": 4.557,
+          "global_activity": 0.02637,
+          "zones": {
+            "Weighing Station": 0.16891,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 115,
+          "time_sec": 4.597,
+          "global_activity": 0.02764,
+          "zones": {
+            "Weighing Station": 0.15846,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 116,
+          "time_sec": 4.637,
+          "global_activity": 0.02703,
+          "zones": {
+            "Weighing Station": 0.15894,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 117,
+          "time_sec": 4.677,
+          "global_activity": 0.02734,
+          "zones": {
+            "Weighing Station": 0.15978,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 118,
+          "time_sec": 4.717,
+          "global_activity": 0.02718,
+          "zones": {
+            "Weighing Station": 0.15287,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 119,
+          "time_sec": 4.757,
+          "global_activity": 0.02629,
+          "zones": {
+            "Weighing Station": 0.15111,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 120,
+          "time_sec": 4.797,
+          "global_activity": 0.02618,
+          "zones": {
+            "Weighing Station": 0.15301,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 121,
+          "time_sec": 4.837,
+          "global_activity": 0.02547,
+          "zones": {
+            "Weighing Station": 0.14674,
+            "Folding Table": 0.00275,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 122,
+          "time_sec": 4.877,
+          "global_activity": 0.02534,
+          "zones": {
+            "Weighing Station": 0.14338,
+            "Folding Table": 0.00275,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 123,
+          "time_sec": 4.917,
+          "global_activity": 0.02471,
+          "zones": {
+            "Weighing Station": 0.12986,
+            "Folding Table": 0.00275,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 124,
+          "time_sec": 4.957,
+          "global_activity": 0.02399,
+          "zones": {
+            "Weighing Station": 0.12534,
+            "Folding Table": 0.00297,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 125,
+          "time_sec": 4.997,
+          "global_activity": 0.02244,
+          "zones": {
+            "Weighing Station": 0.1089,
+            "Folding Table": 0.00297,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 126,
+          "time_sec": 5.037,
+          "global_activity": 0.02214,
+          "zones": {
+            "Weighing Station": 0.11289,
+            "Folding Table": 0.00313,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 127,
+          "time_sec": 5.077,
+          "global_activity": 0.02078,
+          "zones": {
+            "Weighing Station": 0.11466,
+            "Folding Table": 0.00313,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 128,
+          "time_sec": 5.117,
+          "global_activity": 0.0204,
+          "zones": {
+            "Weighing Station": 0.10524,
+            "Folding Table": 0.00313,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 129,
+          "time_sec": 5.157,
+          "global_activity": 0.0194,
+          "zones": {
+            "Weighing Station": 0.10355,
+            "Folding Table": 0.00313,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 130,
+          "time_sec": 5.197,
+          "global_activity": 0.01859,
+          "zones": {
+            "Weighing Station": 0.10538,
+            "Folding Table": 0.00311,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 131,
+          "time_sec": 5.237,
+          "global_activity": 0.01822,
+          "zones": {
+            "Weighing Station": 0.10861,
+            "Folding Table": 0.00226,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 132,
+          "time_sec": 5.277,
+          "global_activity": 0.01729,
+          "zones": {
+            "Weighing Station": 0.10576,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 133,
+          "time_sec": 5.317,
+          "global_activity": 0.01659,
+          "zones": {
+            "Weighing Station": 0.10831,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 134,
+          "time_sec": 5.357,
+          "global_activity": 0.0173,
+          "zones": {
+            "Weighing Station": 0.11304,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 135,
+          "time_sec": 5.397,
+          "global_activity": 0.01813,
+          "zones": {
+            "Weighing Station": 0.10848,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 136,
+          "time_sec": 5.437,
+          "global_activity": 0.0189,
+          "zones": {
+            "Weighing Station": 0.12248,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 137,
+          "time_sec": 5.477,
+          "global_activity": 0.02079,
+          "zones": {
+            "Weighing Station": 0.13675,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 138,
+          "time_sec": 5.517,
+          "global_activity": 0.02092,
+          "zones": {
+            "Weighing Station": 0.14497,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 139,
+          "time_sec": 5.557,
+          "global_activity": 0.02071,
+          "zones": {
+            "Weighing Station": 0.13557,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 140,
+          "time_sec": 5.597,
+          "global_activity": 0.0203,
+          "zones": {
+            "Weighing Station": 0.13911,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 141,
+          "time_sec": 5.637,
+          "global_activity": 0.02062,
+          "zones": {
+            "Weighing Station": 0.14053,
+            "Folding Table": 0.00208,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 142,
+          "time_sec": 5.677,
+          "global_activity": 0.0201,
+          "zones": {
+            "Weighing Station": 0.13411,
+            "Folding Table": 0.00208,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 143,
+          "time_sec": 5.717,
+          "global_activity": 0.01932,
+          "zones": {
+            "Weighing Station": 0.13541,
+            "Folding Table": 0.00199,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 144,
+          "time_sec": 5.757,
+          "global_activity": 0.01793,
+          "zones": {
+            "Weighing Station": 0.12884,
+            "Folding Table": 0.00199,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 145,
+          "time_sec": 5.797,
+          "global_activity": 0.01664,
+          "zones": {
+            "Weighing Station": 0.11406,
+            "Folding Table": 0.00186,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 146,
+          "time_sec": 5.837,
+          "global_activity": 0.01529,
+          "zones": {
+            "Weighing Station": 0.1048,
+            "Folding Table": 0.00186,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 147,
+          "time_sec": 5.876,
+          "global_activity": 0.01417,
+          "zones": {
+            "Weighing Station": 0.10078,
+            "Folding Table": 0.00257,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 148,
+          "time_sec": 5.916,
+          "global_activity": 0.01482,
+          "zones": {
+            "Weighing Station": 0.10938,
+            "Folding Table": 0.00206,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 149,
+          "time_sec": 5.956,
+          "global_activity": 0.01429,
+          "zones": {
+            "Weighing Station": 0.09666,
+            "Folding Table": 0.00108,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 150,
+          "time_sec": 5.996,
+          "global_activity": 0.01546,
+          "zones": {
+            "Weighing Station": 0.1023,
+            "Folding Table": 0.0021,
+            "Sewing Machines": 0.00279
+          }
+        },
+        {
+          "frame": 151,
+          "time_sec": 6.036,
+          "global_activity": 0.01518,
+          "zones": {
+            "Weighing Station": 0.09645,
+            "Folding Table": 0.0021,
+            "Sewing Machines": 0.00159
+          }
+        },
+        {
+          "frame": 152,
+          "time_sec": 6.076,
+          "global_activity": 0.0143,
+          "zones": {
+            "Weighing Station": 0.08715,
+            "Folding Table": 0.00187,
+            "Sewing Machines": 0.00159
+          }
+        },
+        {
+          "frame": 153,
+          "time_sec": 6.116,
+          "global_activity": 0.01315,
+          "zones": {
+            "Weighing Station": 0.06825,
+            "Folding Table": 0.00187,
+            "Sewing Machines": 0.00159
+          }
+        },
+        {
+          "frame": 154,
+          "time_sec": 6.156,
+          "global_activity": 0.01269,
+          "zones": {
+            "Weighing Station": 0.06101,
+            "Folding Table": 0.00162,
+            "Sewing Machines": 0.00159
+          }
+        },
+        {
+          "frame": 155,
+          "time_sec": 6.196,
+          "global_activity": 0.01045,
+          "zones": {
+            "Weighing Station": 0.05185,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 156,
+          "time_sec": 6.236,
+          "global_activity": 0.01156,
+          "zones": {
+            "Weighing Station": 0.05923,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 157,
+          "time_sec": 6.276,
+          "global_activity": 0.0122,
+          "zones": {
+            "Weighing Station": 0.06486,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 158,
+          "time_sec": 6.316,
+          "global_activity": 0.01043,
+          "zones": {
+            "Weighing Station": 0.06021,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00093
+          }
+        },
+        {
+          "frame": 159,
+          "time_sec": 6.356,
+          "global_activity": 0.01008,
+          "zones": {
+            "Weighing Station": 0.06626,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00093
+          }
+        },
+        {
+          "frame": 160,
+          "time_sec": 6.396,
+          "global_activity": 0.01019,
+          "zones": {
+            "Weighing Station": 0.06392,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00093
+          }
+        },
+        {
+          "frame": 161,
+          "time_sec": 6.436,
+          "global_activity": 0.01029,
+          "zones": {
+            "Weighing Station": 0.06796,
+            "Folding Table": 0.00152,
+            "Sewing Machines": 0.00093
+          }
+        },
+        {
+          "frame": 162,
+          "time_sec": 6.476,
+          "global_activity": 0.01079,
+          "zones": {
+            "Weighing Station": 0.07531,
+            "Folding Table": 0.00202,
+            "Sewing Machines": 0.00093
+          }
+        },
+        {
+          "frame": 163,
+          "time_sec": 6.516,
+          "global_activity": 0.01028,
+          "zones": {
+            "Weighing Station": 0.05953,
+            "Folding Table": 0.00202,
+            "Sewing Machines": 0.00093
+          }
+        },
+        {
+          "frame": 164,
+          "time_sec": 6.556,
+          "global_activity": 0.01054,
+          "zones": {
+            "Weighing Station": 0.05277,
+            "Folding Table": 0.00202,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 165,
+          "time_sec": 6.596,
+          "global_activity": 0.01012,
+          "zones": {
+            "Weighing Station": 0.03554,
+            "Folding Table": 0.00367,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 166,
+          "time_sec": 6.636,
+          "global_activity": 0.01149,
+          "zones": {
+            "Weighing Station": 0.02473,
+            "Folding Table": 0.00452,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 167,
+          "time_sec": 6.676,
+          "global_activity": 0.01319,
+          "zones": {
+            "Weighing Station": 0.01659,
+            "Folding Table": 0.00601,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 168,
+          "time_sec": 6.716,
+          "global_activity": 0.01871,
+          "zones": {
+            "Weighing Station": 0.02682,
+            "Folding Table": 0.00821,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 169,
+          "time_sec": 6.756,
+          "global_activity": 0.02332,
+          "zones": {
+            "Weighing Station": 0.03252,
+            "Folding Table": 0.00648,
+            "Sewing Machines": 0.00074
+          }
+        },
+        {
+          "frame": 170,
+          "time_sec": 6.796,
+          "global_activity": 0.02498,
+          "zones": {
+            "Weighing Station": 0.02779,
+            "Folding Table": 0.00336,
+            "Sewing Machines": 0.00158
+          }
+        },
+        {
+          "frame": 171,
+          "time_sec": 6.836,
+          "global_activity": 0.02656,
+          "zones": {
+            "Weighing Station": 0.02703,
+            "Folding Table": 0.00571,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 172,
+          "time_sec": 6.876,
+          "global_activity": 0.02983,
+          "zones": {
+            "Weighing Station": 0.02514,
+            "Folding Table": 0.00546,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 173,
+          "time_sec": 6.916,
+          "global_activity": 0.03236,
+          "zones": {
+            "Weighing Station": 0.02633,
+            "Folding Table": 0.00713,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 174,
+          "time_sec": 6.956,
+          "global_activity": 0.03404,
+          "zones": {
+            "Weighing Station": 0.02352,
+            "Folding Table": 0.00841,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 175,
+          "time_sec": 6.996,
+          "global_activity": 0.03463,
+          "zones": {
+            "Weighing Station": 0.02202,
+            "Folding Table": 0.00767,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 176,
+          "time_sec": 7.036,
+          "global_activity": 0.03324,
+          "zones": {
+            "Weighing Station": 0.01342,
+            "Folding Table": 0.00217,
+            "Sewing Machines": 0.00084
+          }
+        },
+        {
+          "frame": 177,
+          "time_sec": 7.076,
+          "global_activity": 0.03285,
+          "zones": {
+            "Weighing Station": 0.0151,
+            "Folding Table": 0.00526,
+            "Sewing Machines": 0.00084
+          }
+        },
+        {
+          "frame": 178,
+          "time_sec": 7.116,
+          "global_activity": 0.0329,
+          "zones": {
+            "Weighing Station": 0.01779,
+            "Folding Table": 0.00368,
+            "Sewing Machines": 0.00084
+          }
+        },
+        {
+          "frame": 179,
+          "time_sec": 7.156,
+          "global_activity": 0.03276,
+          "zones": {
+            "Weighing Station": 0.02254,
+            "Folding Table": 0.00403,
+            "Sewing Machines": 0.00084
+          }
+        },
+        {
+          "frame": 180,
+          "time_sec": 7.196,
+          "global_activity": 0.03533,
+          "zones": {
+            "Weighing Station": 0.04028,
+            "Folding Table": 0.00572,
+            "Sewing Machines": 0.00084
+          }
+        },
+        {
+          "frame": 181,
+          "time_sec": 7.236,
+          "global_activity": 0.03773,
+          "zones": {
+            "Weighing Station": 0.09329,
+            "Folding Table": 0.01081,
+            "Sewing Machines": 0.0009
+          }
+        },
+        {
+          "frame": 182,
+          "time_sec": 7.276,
+          "global_activity": 0.04075,
+          "zones": {
+            "Weighing Station": 0.18268,
+            "Folding Table": 0.0064,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 183,
+          "time_sec": 7.316,
+          "global_activity": 0.04152,
+          "zones": {
+            "Weighing Station": 0.18632,
+            "Folding Table": 0.01153,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 184,
+          "time_sec": 7.356,
+          "global_activity": 0.03996,
+          "zones": {
+            "Weighing Station": 0.16925,
+            "Folding Table": 0.01232,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 185,
+          "time_sec": 7.396,
+          "global_activity": 0.03486,
+          "zones": {
+            "Weighing Station": 0.14017,
+            "Folding Table": 0.01159,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 186,
+          "time_sec": 7.436,
+          "global_activity": 0.03146,
+          "zones": {
+            "Weighing Station": 0.14566,
+            "Folding Table": 0.01005,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 187,
+          "time_sec": 7.476,
+          "global_activity": 0.03531,
+          "zones": {
+            "Weighing Station": 0.17813,
+            "Folding Table": 0.00958,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 188,
+          "time_sec": 7.516,
+          "global_activity": 0.0363,
+          "zones": {
+            "Weighing Station": 0.17752,
+            "Folding Table": 0.00504,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 189,
+          "time_sec": 7.555,
+          "global_activity": 0.03567,
+          "zones": {
+            "Weighing Station": 0.16507,
+            "Folding Table": 0.00201,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 190,
+          "time_sec": 7.595,
+          "global_activity": 0.03655,
+          "zones": {
+            "Weighing Station": 0.17347,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00139
+          }
+        },
+        {
+          "frame": 191,
+          "time_sec": 7.635,
+          "global_activity": 0.03067,
+          "zones": {
+            "Weighing Station": 0.11641,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00269
+          }
+        },
+        {
+          "frame": 192,
+          "time_sec": 7.675,
+          "global_activity": 0.02789,
+          "zones": {
+            "Weighing Station": 0.11493,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00288
+          }
+        },
+        {
+          "frame": 193,
+          "time_sec": 7.715,
+          "global_activity": 0.02507,
+          "zones": {
+            "Weighing Station": 0.11157,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00279
+          }
+        },
+        {
+          "frame": 194,
+          "time_sec": 7.755,
+          "global_activity": 0.02418,
+          "zones": {
+            "Weighing Station": 0.11514,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0026
+          }
+        },
+        {
+          "frame": 195,
+          "time_sec": 7.795,
+          "global_activity": 0.02652,
+          "zones": {
+            "Weighing Station": 0.14474,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 196,
+          "time_sec": 7.835,
+          "global_activity": 0.02876,
+          "zones": {
+            "Weighing Station": 0.17591,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 197,
+          "time_sec": 7.875,
+          "global_activity": 0.03324,
+          "zones": {
+            "Weighing Station": 0.21293,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 198,
+          "time_sec": 7.915,
+          "global_activity": 0.0394,
+          "zones": {
+            "Weighing Station": 0.24102,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0013
+          }
+        },
+        {
+          "frame": 199,
+          "time_sec": 7.955,
+          "global_activity": 0.04358,
+          "zones": {
+            "Weighing Station": 0.25559,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 200,
+          "time_sec": 7.995,
+          "global_activity": 0.04381,
+          "zones": {
+            "Weighing Station": 0.22829,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 201,
+          "time_sec": 8.035,
+          "global_activity": 0.04056,
+          "zones": {
+            "Weighing Station": 0.17642,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 202,
+          "time_sec": 8.075,
+          "global_activity": 0.04189,
+          "zones": {
+            "Weighing Station": 0.13362,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 203,
+          "time_sec": 8.115,
+          "global_activity": 0.04481,
+          "zones": {
+            "Weighing Station": 0.09473,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 204,
+          "time_sec": 8.155,
+          "global_activity": 0.04473,
+          "zones": {
+            "Weighing Station": 0.07744,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 205,
+          "time_sec": 8.195,
+          "global_activity": 0.04128,
+          "zones": {
+            "Weighing Station": 0.06736,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00159
+          }
+        },
+        {
+          "frame": 206,
+          "time_sec": 8.235,
+          "global_activity": 0.04093,
+          "zones": {
+            "Weighing Station": 0.05883,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.0
+          }
+        },
+        {
+          "frame": 207,
+          "time_sec": 8.275,
+          "global_activity": 0.03742,
+          "zones": {
+            "Weighing Station": 0.05302,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00121
+          }
+        },
+        {
+          "frame": 208,
+          "time_sec": 8.315,
+          "global_activity": 0.03315,
+          "zones": {
+            "Weighing Station": 0.04972,
+            "Folding Table": 0.0,
+            "Sewing Machines": 0.00277
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "ch19": {
+      "frames": 164,
+      "duration_sec": 6.556,
+      "total_events": 4,
+      "zone_counts": {
+        "Cutting Table": 2,
+        "Left Sorting Worker": 1,
+        "Right Pile Area": 1
+      }
+    },
+    "ch21": {
+      "frames": 209,
+      "duration_sec": 8.355,
+      "total_events": 7,
+      "zone_counts": {
+        "Weighing Station": 3,
+        "Folding Table": 1,
+        "Sewing Machines": 3
+      }
+    }
+  }
+}
