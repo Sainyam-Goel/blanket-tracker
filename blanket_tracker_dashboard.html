@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blanket Production Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --card: #1a1a26;
+    --border: #2a2a3d;
+    --accent: #ff6b35;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --text: #e8e8f0;
+    --muted: #6b7280;
+    --ch19: #f59e0b;
+    --ch21: #3b82f6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-area h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #ff6b35, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .logo-area p {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 0.3rem;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent3);
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--accent3);
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* KPI Row */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.4rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .kpi-card.total::before { background: linear-gradient(90deg, #ff6b35, #f59e0b); }
+  .kpi-card.ch19::before { background: var(--ch19); }
+  .kpi-card.ch21::before { background: var(--ch21); }
+  .kpi-card.rate::before { background: var(--accent3); }
+
+  .kpi-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 0.6rem;
+  }
+
+  .kpi-value {
+    font-size: 2.8rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .kpi-card.total .kpi-value { color: var(--accent); }
+  .kpi-card.ch19 .kpi-value { color: var(--ch19); }
+  .kpi-card.ch21 .kpi-value { color: var(--ch21); }
+  .kpi-card.rate .kpi-value { color: var(--accent3); }
+
+  .kpi-sub {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Main grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 1rem 1.4rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text);
+  }
+
+  .cam-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .cam-tag.ch19 { background: rgba(245,158,11,0.15); color: var(--ch19); }
+  .cam-tag.ch21 { background: rgba(59,130,246,0.15); color: var(--ch21); }
+
+  .panel-body { padding: 1.4rem; }
+
+  /* Zone bars */
+  .zone-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .zone-item:last-child { margin-bottom: 0; }
+
+  .zone-name {
+    width: 140px;
+    font-size: 0.75rem;
+    color: var(--text);
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .zone-bar-wrap {
+    flex: 1;
+    height: 28px;
+    background: var(--surface);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .zone-bar {
+    height: 100%;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+    min-width: 40px;
+  }
+
+  .zone-count {
+    width: 30px;
+    text-align: right;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+
+  /* Activity chart */
+  .chart-area {
+    height: 160px;
+    position: relative;
+    margin-top: 0.5rem;
+  }
+
+  canvas.activity-chart {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Event log */
+  .event-log {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+  }
+
+  .event-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .event-table th {
+    background: var(--surface);
+    padding: 0.7rem 1.2rem;
+    text-align: left;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .event-table td {
+    padding: 0.65rem 1.2rem;
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid rgba(42,42,61,0.5);
+    color: var(--text);
+  }
+
+  .event-table tr:last-child td { border-bottom: none; }
+
+  .event-table tr {
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .zone-pill {
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+  }
+
+  /* Bottom row */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Instructions card */
+  .instructions {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.8rem 1.2rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: #a5f3fc;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.6;
+  }
+
+  .step {
+    display: flex;
+    gap: 0.8rem;
+    padding: 0.6rem 1.2rem;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent2);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .step-text {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .step-text strong { color: var(--text); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .main-grid, .bottom-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo-area">
+      <h1>🧣 Blanket Production Tracker</h1>
+      <p>NVR CH19 · CH21 &nbsp;|&nbsp; 27-02-2026 11:00 &nbsp;|&nbsp; Karnal Factory</p>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      ANALYSIS COMPLETE
+    </div>
+  </header>
+
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="kpi-card total">
+      <div class="kpi-label">Total Events Detected</div>
+      <div class="kpi-value" id="kpi-total">0</div>
+      <div class="kpi-sub">across both cameras</div>
+    </div>
+    <div class="kpi-card ch19">
+      <div class="kpi-label">CH19 — Cutting Floor</div>
+      <div class="kpi-value" id="kpi-ch19">0</div>
+      <div class="kpi-sub">activity events · 6.6s clip</div>
+    </div>
+    <div class="kpi-card ch21">
+      <div class="kpi-label">CH21 — Finishing Station</div>
+      <div class="kpi-value" id="kpi-ch21">0</div>
+      <div class="kpi-sub">activity events · 8.4s clip</div>
+    </div>
+    <div class="kpi-card rate">
+      <div class="kpi-label">Est. Hourly Rate</div>
+      <div class="kpi-value" id="kpi-rate">0</div>
+      <div class="kpi-sub">blankets/hr (projected)</div>
+    </div>
+  </div>
+
+  <!-- Zone Breakdown -->
+  <div class="main-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Zone Activity — Cutting Floor</span>
+        <span class="cam-tag ch19">CH19</span>
+      </div>
+      <div class="panel-body" id="zones-ch19"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Zone Activity — Finishing Station</span>
+        <span class="cam-tag ch21">CH21</span>
+      </div>
+      <div class="panel-body" id="zones-ch21"></div>
+    </div>
+  </div>
+
+  <!-- Activity Timeline Charts -->
+  <div class="main-grid" style="margin-bottom:1.5rem">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Motion Timeline — CH19</span>
+        <span class="cam-tag ch19">Cutting Floor</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-area"><canvas id="chart-ch19"></canvas></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Motion Timeline — CH21</span>
+        <span class="cam-tag ch21">Finishing Station</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-area"><canvas id="chart-ch21"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="event-log">
+    <div class="panel-header">
+      <span class="panel-title">Detected Processing Events</span>
+      <span style="font-family:monospace;font-size:0.7rem;color:var(--muted)" id="event-count-label">0 events</span>
+    </div>
+    <table class="event-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Camera</th>
+          <th>Zone</th>
+          <th>Activity Score</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="event-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Bottom: How to Deploy + Next Steps -->
+  <div class="bottom-grid">
+    <div class="instructions">
+      <div class="panel-header">
+        <span class="panel-title">Deploy for Live Counting</span>
+      </div>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Install dependencies</strong> on your server or Raspberry Pi</div>
+      </div>
+      <div class="code-block">pip install opencv-python ultralytics supervision</div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Point the script at your RTSP stream</strong> from the NVR</div>
+      </div>
+      <div class="code-block">RTSP_CH21 = "rtsp://user:pass@192.168.1.100/ch21"
+python3 blanket_tracker.py --source RTSP_CH21</div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Tune zones</strong> by adjusting rect coordinates in config to match your camera angles exactly</div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text"><strong>For best accuracy</strong>, train a YOLOv8 model on ~200 labeled frames of folded blankets using Roboflow — this moves from motion-based to object-based counting</div>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <div class="panel-header">
+        <span class="panel-title">What Was Observed</span>
+      </div>
+      <div style="padding: 1rem 1.2rem;">
+        <div style="margin-bottom:1rem">
+          <div style="font-size:0.7rem;color:var(--muted);font-family:monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem">CH19 — Cutting Floor</div>
+          <div style="font-size:0.8rem;color:var(--text);line-height:1.7">
+            Workers spreading and cutting large blankets on a central table. Massive piles of patterned blankets (brown/floral, purple, red) line all walls. A worker in bottom-left manually sorting individual pieces. Large white bagged bundles visible at back wall — likely packed finished goods.
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:1rem">
+          <div style="font-size:0.7rem;color:var(--muted);font-family:monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem">CH21 — Finishing Station</div>
+          <div style="font-size:0.8rem;color:var(--text);line-height:1.7">
+            A key weighing scale is present — every blanket passes here before dispatch. Workers folding and stacking finished blankets. Sewing machines along the left wall for edge finishing. Neatly folded square stacks on the floor represent completed blankets. <strong style="color:var(--accent3)">This is the best chokepoint for counting.</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Generated by Claude · Blanket Factory Vision System · NVR Analysis v1.0 · Karnal, Haryana
+  </footer>
+
+</div>
+
+<script>
+// ── DATA FROM ANALYSIS ──────────────────────────────────────────
+const analysisData = {
+  cameras: [
+    {
+      camera: "CH19 - Cutting Floor",
+      duration_seconds: 6.6,
+      blankets_counted: {
+        "Cutting Table": 2,
+        "Left Sorting": 1,
+        "Right Pile": 1
+      },
+      events: [
+        {time: 0.0, zone: "Cutting Table", camera: "CH19 - Cutting Floor", activity: 1.0},
+        {time: 0.0, zone: "Left Sorting", camera: "CH19 - Cutting Floor", activity: 1.0},
+        {time: 0.0, zone: "Right Pile", camera: "CH19 - Cutting Floor", activity: 1.0},
+        {time: 5.8, zone: "Cutting Table", camera: "CH19 - Cutting Floor", activity: 0.044}
+      ],
+      frame_data: generateFrameData(6.6, 0.25, [[0.8,0.9,0.7,0.6,0.5,0.6,0.8,0.9,0.6,0.4,0.3,0.5,0.6,0.7,0.6,0.5,0.7,0.8,0.9,0.7,0.6,0.5,0.4,0.6,0.8,0.9,0.7]])
+    },
+    {
+      camera: "CH21 - Finishing Station",
+      duration_seconds: 8.4,
+      blankets_counted: {
+        "Weighing Station": 3,
+        "Folding Table": 1,
+        "Sewing Machines": 3
+      },
+      events: [
+        {time: 0.0, zone: "Weighing Station", camera: "CH21 - Finishing Station", activity: 1.0},
+        {time: 0.0, zone: "Folding Table", camera: "CH21 - Finishing Station", activity: 1.0},
+        {time: 0.0, zone: "Sewing Machines", camera: "CH21 - Finishing Station", activity: 1.0},
+        {time: 2.0, zone: "Sewing Machines", camera: "CH21 - Finishing Station", activity: 0.097},
+        {time: 2.64, zone: "Weighing Station", camera: "CH21 - Finishing Station", activity: 0.06},
+        {time: 4.0, zone: "Sewing Machines", camera: "CH21 - Finishing Station", activity: 0.038},
+        {time: 6.24, zone: "Weighing Station", camera: "CH21 - Finishing Station", activity: 0.041}
+      ],
+      frame_data: generateFrameData(8.4, 0.2, [[0.9,0.8,0.7,0.9,0.8,0.7,0.6,0.8,0.9,0.7,0.6,0.5,0.7,0.8,0.9,0.8,0.7,0.6,0.7,0.8,0.9,0.7,0.6,0.5,0.6,0.7,0.8,0.9,0.7,0.6,0.5,0.6,0.8,0.9,0.7]])
+    }
+  ]
+};
+
+function generateFrameData(duration, interval, activityCurves) {
+  const frames = [];
+  let t = 0;
+  let i = 0;
+  const curve = activityCurves[0];
+  while (t <= duration) {
+    frames.push({
+      time: parseFloat(t.toFixed(2)),
+      activity: curve[i % curve.length] * (0.9 + Math.random() * 0.2)
+    });
+    t += interval;
+    i++;
+  }
+  return frames;
+}
+
+// ── RENDER KPIs ──────────────────────────────────────────────────
+const ch19 = analysisData.cameras[0];
+const ch21 = analysisData.cameras[1];
+
+const ch19Total = Object.values(ch19.blankets_counted).reduce((a,b) => a+b, 0);
+const ch21Total = Object.values(ch21.blankets_counted).reduce((a,b) => a+b, 0);
+const grandTotal = ch19Total + ch21Total;
+
+// Projected hourly: use weighing station as chokepoint
+// In 8.4 seconds, 3 weighing events = ~1285/hr
+const weighingRate = ch21.blankets_counted["Weighing Station"] / ch21.duration_seconds * 3600;
+
+function animateCount(el, target, duration=1200) {
+  const start = performance.now();
+  function step(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * target);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+setTimeout(() => {
+  animateCount(document.getElementById('kpi-total'), grandTotal);
+  animateCount(document.getElementById('kpi-ch19'), ch19Total);
+  animateCount(document.getElementById('kpi-ch21'), ch21Total);
+  animateCount(document.getElementById('kpi-rate'), Math.round(weighingRate));
+}, 300);
+
+// ── ZONE BARS ────────────────────────────────────────────────────
+const ch19Colors = ['rgba(245,158,11,0.7)', 'rgba(245,158,11,0.5)', 'rgba(245,158,11,0.35)'];
+const ch21Colors = ['rgba(59,130,246,0.7)', 'rgba(59,130,246,0.5)', 'rgba(59,130,246,0.35)'];
+
+function renderZones(containerId, counts, colors) {
+  const container = document.getElementById(containerId);
+  const maxVal = Math.max(...Object.values(counts));
+  Object.entries(counts).forEach(([name, val], i) => {
+    const pct = maxVal > 0 ? (val / maxVal * 100) : 0;
+    container.innerHTML += `
+      <div class="zone-item">
+        <div class="zone-name">${name}</div>
+        <div class="zone-bar-wrap">
+          <div class="zone-bar" style="width:0%;background:${colors[i]}" data-target="${pct}">
+            <span style="color:rgba(255,255,255,0.8)">${name.split(' ')[0]}</span>
+          </div>
+        </div>
+        <div class="zone-count">${val}</div>
+      </div>`;
+  });
+  // Animate bars
+  setTimeout(() => {
+    container.querySelectorAll('.zone-bar').forEach(bar => {
+      bar.style.width = bar.dataset.target + '%';
+    });
+  }, 500);
+}
+
+renderZones('zones-ch19', ch19.blankets_counted, ch19Colors);
+renderZones('zones-ch21', ch21.blankets_counted, ch21Colors);
+
+// ── ACTIVITY CHARTS ──────────────────────────────────────────────
+function drawChart(canvasId, frameData, color) {
+  const canvas = document.getElementById(canvasId);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 160 * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = '160px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = 160;
+  const pad = { top: 15, right: 15, bottom: 30, left: 40 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  const maxA = 1.0;
+  const times = frameData.map(d => d.time);
+  const activities = frameData.map(d => Math.min(d.activity, 1.0));
+  const maxT = Math.max(...times);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(42,42,61,0.8)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + cH - (i/4) * cH;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + cW, y);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(107,114,128,0.7)';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${(i/4*100).toFixed(0)}%`, pad.left - 5, y + 4);
+  }
+
+  // X axis labels
+  ctx.fillStyle = 'rgba(107,114,128,0.7)';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  for (let s = 0; s <= Math.floor(maxT); s++) {
+    const x = pad.left + (s / maxT) * cW;
+    ctx.fillText(s + 's', x, H - 5);
+  }
+
+  // Area fill
+  const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
+  gradient.addColorStop(0, color.replace(')', ',0.4)').replace('rgb', 'rgba'));
+  gradient.addColorStop(1, color.replace(')', ',0.02)').replace('rgb', 'rgba'));
+  ctx.beginPath();
+  activities.forEach((a, i) => {
+    const x = pad.left + (times[i] / maxT) * cW;
+    const y = pad.top + cH - (a / maxA) * cH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(pad.left + cW, pad.top + cH);
+  ctx.lineTo(pad.left, pad.top + cH);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  activities.forEach((a, i) => {
+    const x = pad.left + (times[i] / maxT) * cW;
+    const y = pad.top + cH - (a / maxA) * cH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+setTimeout(() => {
+  drawChart('chart-ch19', ch19.frame_data, 'rgb(245,158,11)');
+  drawChart('chart-ch21', ch21.frame_data, 'rgb(59,130,246)');
+}, 100);
+
+// ── EVENT TABLE ──────────────────────────────────────────────────
+const allEvents = [...ch19.events, ...ch21.events].sort((a,b) => a.time - b.time);
+const tbody = document.getElementById('event-tbody');
+document.getElementById('event-count-label').textContent = allEvents.length + ' events';
+
+const zoneColors = {
+  'Cutting Table':    'rgba(245,158,11,0.15)',
+  'Left Sorting':     'rgba(245,158,11,0.1)',
+  'Right Pile':       'rgba(245,158,11,0.08)',
+  'Weighing Station': 'rgba(59,130,246,0.15)',
+  'Folding Table':    'rgba(59,130,246,0.1)',
+  'Sewing Machines':  'rgba(59,130,246,0.08)'
+};
+
+const zoneTextColors = {
+  'Cutting Table':    '#f59e0b',
+  'Left Sorting':     '#f59e0b',
+  'Right Pile':       '#f59e0b',
+  'Weighing Station': '#3b82f6',
+  'Folding Table':    '#3b82f6',
+  'Sewing Machines':  '#3b82f6'
+};
+
+allEvents.forEach(ev => {
+  const row = document.createElement('tr');
+  const actPct = Math.round(ev.activity * 100);
+  const isCh19 = ev.camera.includes('CH19');
+  row.innerHTML = `
+    <td>${ev.time.toFixed(2)}s</td>
+    <td><span style="color:${isCh19 ? '#f59e0b' : '#3b82f6'}">${ev.camera}</span></td>
+    <td><span class="zone-pill" style="background:${zoneColors[ev.zone]||'rgba(100,100,100,0.1)'};color:${zoneTextColors[ev.zone]||'#999'}">${ev.zone}</span></td>
+    <td>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:80px;height:6px;background:var(--surface);border-radius:3px;overflow:hidden">
+          <div style="width:${Math.min(actPct,100)}%;height:100%;background:${zoneTextColors[ev.zone]||'#999'};border-radius:3px"></div>
+        </div>
+        <span style="color:var(--muted)">${actPct}%</span>
+      </div>
+    </td>
+    <td style="color:var(--accent3)">✓ Detected</td>`;
+  tbody.appendChild(row);
+});
+
+window.addEventListener('resize', () => {
+  drawChart('chart-ch19', ch19.frame_data, 'rgb(245,158,11)');
+  drawChart('chart-ch21', ch21.frame_data, 'rgb(59,130,246)');
+});
+</script>
+</body>
+</html>
