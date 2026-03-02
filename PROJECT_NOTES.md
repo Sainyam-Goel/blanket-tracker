@@ -305,6 +305,81 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ---
 
+## CH19 Cutting Counter
+
+### Process
+4 workers at white cutting table (2 in back cut, 2 in front slide pieces off). Blanket spread across table → cut → piece slides down front → repeat. After 29:37 mark, only 2 workers.
+
+### Video
+- Full: `/Users/sai/Downloads/Full cut vido.mp4` (59.9 min, 25fps, 1920x1080, 898MB)
+- Clip: `/Users/sai/Downloads/Cutting clip.mp4` (12.1s, 2 cuts at ~2s and ~8s)
+
+### Key Timestamps (user-provided ground truth)
+| Time | Event |
+|------|-------|
+| 0:10 | Process starts, blanket on table |
+| 0:14 | First physical cut |
+| 0:20 | First slide (piece off table) |
+| 3:07 | Last piece of first blanket set |
+| 3:09 | Break |
+| 4:01 | New blanket set, new color |
+| 14:34 | Sliding pile starts getting big |
+| 29:37 | Break, then only 2 workers |
+| 30:35 | Discard cut + first main cut (2 workers) |
+| 30:41 | Discard cut |
+| 30:45 | Main cut |
+| 33:41 | Another cut |
+| 33:47 | Last discard cut |
+| 39:22-42:48 | Noisy small pieces period |
+| 42:40 | Last cut (cloth doesn't fall completely) |
+| 42:40+ | No cutting |
+
+### Detection: v1 (absolute brightness thresholds) — FAILED
+- TABLE_ROI (820,240,1020,360) mean brightness: covered=80-86, exposed=150-182 in short clip
+- ON=120, OFF=100 with hysteresis state machine
+- **Problem**: "Covered" baseline varies 77-155 depending on blanket color. ON=120 triggered 76.5% of full video. Completely unusable.
+
+### Detection: v2 (brightness derivative) — CURRENT
+**Method**: Detect positive derivative spikes in smoothed table brightness.
+- When a piece slides off → white table exposed → brightness INCREASES rapidly
+- Compute derivative: current smoothed brightness − smoothed brightness 2s ago
+- Spike above threshold 20 = cut detected
+- Color-agnostic: detects CHANGE, not absolute level
+
+**Signal analysis across full video:**
+| Phase | Brightness baseline | Typical derivative | Detection quality |
+|-------|--------------------|--------------------|-------------------|
+| 4 workers, dark fabric (0:19-3:07) | ~77 | +35 to +120 | Excellent |
+| 4 workers, lighter fabrics (4:01-29:37) | 90-155 (varies) | +20 to +100 | Good |
+| 2 workers (29:37-33:49) | 125-157 | +15 to +28 | Moderate (some misses) |
+| Small pieces (39:22-42:48) | variable | wild oscillations | Noisy |
+| Empty table / breaks | ~248 | ~0 | Suppressed correctly |
+
+**Break periods detected (brightness > 235 for > 3s):**
+- 3:08-3:45, 10:47-11:29, 20:34-20:49, 25:52-26:33, 29:36-29:58, 33:49-34:25, 39:21-39:40, 42:49-end
+
+**Results (v2, full video):**
+- 333 cuts detected
+- Active time: ~56 min, Break time: ~3.8 min
+- Rate: 5.9 cuts/min (averaged over all phases)
+- Processing: 497 fps (19.9x realtime)
+
+### ROI Analysis (from frame extraction)
+- 13 frames extracted from cutting clip to `frames/ch19/`
+- Table surface clearly white; right side (820-1020, 240-360) shows best signal
+- Slide zone (720-960, 370-520) shows motion spikes during cuts but unreliable in 2-worker phase
+- Frame-diff grid analysis confirmed motion hotspot at (720,180)-(960,360) during all cut events
+
+### CH19 Files
+| File | Purpose |
+|------|---------|
+| `cutting_counter.py` | CH19 counter v2 (derivative-based, ~300 lines) |
+| `cutting_full_v2.json` | Full video results (333 cuts, events + frame_data) |
+| `cutting_test.json` | Short clip results (2 cuts) |
+| `frames/ch19/` | 13 extracted frames for ROI analysis |
+
+---
+
 ## Key Learnings
 
 1. **Reference-frame comparison beats motion detection**: MOG2/optical flow is too noisy for production counting. Simple mean-absolute-diff against a learned reference is far more reliable.

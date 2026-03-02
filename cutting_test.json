@@ -1,0 +1,472 @@
+{
+  "metadata": {
+    "video": "/Users/sai/Downloads/Cutting clip.mp4",
+    "fps": 25.00618965090369,
+    "duration_sec": 10.32,
+    "total_frames": 258,
+    "processing_time_sec": 0.51
+  },
+  "config": {
+    "table_roi": [
+      820,
+      240,
+      1020,
+      360
+    ],
+    "slide_roi": [
+      720,
+      370,
+      960,
+      520
+    ],
+    "on_thresh": 120,
+    "off_thresh": 100,
+    "smooth_window": 10,
+    "min_cycle_frames": 75
+  },
+  "summary": {
+    "total_cuts": 2,
+    "cuts_per_minute": 11.6,
+    "avg_cycle_sec": 5.4
+  },
+  "events": [
+    {
+      "type": "cut",
+      "frame": 53,
+      "time_sec": 2.12,
+      "end_frame": 63,
+      "end_time_sec": 2.52,
+      "duration_sec": 0.4,
+      "table_brightness": 82.7,
+      "slide_motion_peak": 24.7
+    },
+    {
+      "type": "cut",
+      "frame": 187,
+      "time_sec": 7.48,
+      "end_frame": 246,
+      "end_time_sec": 9.84,
+      "duration_sec": 2.36,
+      "table_brightness": 89.3,
+      "slide_motion_peak": 30.7
+    }
+  ],
+  "frame_data": [
+    {
+      "frame": 0,
+      "time_sec": 0.0,
+      "table_brightness": 84.9,
+      "smoothed_brightness": 84.9,
+      "slide_motion": 0.0,
+      "state": "COVERED"
+    },
+    {
+      "frame": 5,
+      "time_sec": 0.2,
+      "table_brightness": 85.7,
+      "smoothed_brightness": 85.3,
+      "slide_motion": 17.7,
+      "state": "COVERED"
+    },
+    {
+      "frame": 10,
+      "time_sec": 0.4,
+      "table_brightness": 86.2,
+      "smoothed_brightness": 85.9,
+      "slide_motion": 12.6,
+      "state": "COVERED"
+    },
+    {
+      "frame": 15,
+      "time_sec": 0.6,
+      "table_brightness": 86.2,
+      "smoothed_brightness": 86.3,
+      "slide_motion": 13.1,
+      "state": "COVERED"
+    },
+    {
+      "frame": 20,
+      "time_sec": 0.8,
+      "table_brightness": 86.0,
+      "smoothed_brightness": 86.3,
+      "slide_motion": 10.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 25,
+      "time_sec": 1.0,
+      "table_brightness": 86.8,
+      "smoothed_brightness": 86.4,
+      "slide_motion": 7.1,
+      "state": "COVERED"
+    },
+    {
+      "frame": 30,
+      "time_sec": 1.2,
+      "table_brightness": 85.3,
+      "smoothed_brightness": 86.5,
+      "slide_motion": 10.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 35,
+      "time_sec": 1.4,
+      "table_brightness": 84.5,
+      "smoothed_brightness": 85.7,
+      "slide_motion": 5.0,
+      "state": "COVERED"
+    },
+    {
+      "frame": 40,
+      "time_sec": 1.6,
+      "table_brightness": 98.0,
+      "smoothed_brightness": 88.4,
+      "slide_motion": 8.6,
+      "state": "COVERED"
+    },
+    {
+      "frame": 45,
+      "time_sec": 1.8,
+      "table_brightness": 122.3,
+      "smoothed_brightness": 100.7,
+      "slide_motion": 8.1,
+      "state": "COVERED"
+    },
+    {
+      "frame": 50,
+      "time_sec": 2.0,
+      "table_brightness": 182.4,
+      "smoothed_brightness": 135.2,
+      "slide_motion": 13.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 55,
+      "time_sec": 2.2,
+      "table_brightness": 74.4,
+      "smoothed_brightness": 129.8,
+      "slide_motion": 16.9,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 60,
+      "time_sec": 2.4,
+      "table_brightness": 81.7,
+      "smoothed_brightness": 89.9,
+      "slide_motion": 24.7,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 65,
+      "time_sec": 2.6,
+      "table_brightness": 125.3,
+      "smoothed_brightness": 92.0,
+      "slide_motion": 19.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 70,
+      "time_sec": 2.8,
+      "table_brightness": 151.8,
+      "smoothed_brightness": 125.6,
+      "slide_motion": 36.6,
+      "state": "COVERED"
+    },
+    {
+      "frame": 75,
+      "time_sec": 3.0,
+      "table_brightness": 151.7,
+      "smoothed_brightness": 149.7,
+      "slide_motion": 29.3,
+      "state": "COVERED"
+    },
+    {
+      "frame": 80,
+      "time_sec": 3.2,
+      "table_brightness": 148.5,
+      "smoothed_brightness": 150.4,
+      "slide_motion": 13.9,
+      "state": "COVERED"
+    },
+    {
+      "frame": 85,
+      "time_sec": 3.4,
+      "table_brightness": 146.3,
+      "smoothed_brightness": 148.6,
+      "slide_motion": 2.3,
+      "state": "COVERED"
+    },
+    {
+      "frame": 90,
+      "time_sec": 3.6,
+      "table_brightness": 136.6,
+      "smoothed_brightness": 144.7,
+      "slide_motion": 10.6,
+      "state": "COVERED"
+    },
+    {
+      "frame": 95,
+      "time_sec": 3.8,
+      "table_brightness": 113.7,
+      "smoothed_brightness": 132.2,
+      "slide_motion": 7.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 100,
+      "time_sec": 4.0,
+      "table_brightness": 104.2,
+      "smoothed_brightness": 114.3,
+      "slide_motion": 8.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 105,
+      "time_sec": 4.2,
+      "table_brightness": 102.7,
+      "smoothed_brightness": 104.8,
+      "slide_motion": 15.3,
+      "state": "COVERED"
+    },
+    {
+      "frame": 110,
+      "time_sec": 4.4,
+      "table_brightness": 102.1,
+      "smoothed_brightness": 102.7,
+      "slide_motion": 7.0,
+      "state": "COVERED"
+    },
+    {
+      "frame": 115,
+      "time_sec": 4.6,
+      "table_brightness": 88.5,
+      "smoothed_brightness": 98.1,
+      "slide_motion": 14.0,
+      "state": "COVERED"
+    },
+    {
+      "frame": 120,
+      "time_sec": 4.8,
+      "table_brightness": 81.9,
+      "smoothed_brightness": 88.3,
+      "slide_motion": 6.8,
+      "state": "COVERED"
+    },
+    {
+      "frame": 125,
+      "time_sec": 5.0,
+      "table_brightness": 78.8,
+      "smoothed_brightness": 80.9,
+      "slide_motion": 20.0,
+      "state": "COVERED"
+    },
+    {
+      "frame": 130,
+      "time_sec": 5.2,
+      "table_brightness": 83.0,
+      "smoothed_brightness": 80.3,
+      "slide_motion": 5.3,
+      "state": "COVERED"
+    },
+    {
+      "frame": 135,
+      "time_sec": 5.4,
+      "table_brightness": 79.8,
+      "smoothed_brightness": 80.4,
+      "slide_motion": 19.9,
+      "state": "COVERED"
+    },
+    {
+      "frame": 140,
+      "time_sec": 5.6,
+      "table_brightness": 80.8,
+      "smoothed_brightness": 80.3,
+      "slide_motion": 6.6,
+      "state": "COVERED"
+    },
+    {
+      "frame": 145,
+      "time_sec": 5.8,
+      "table_brightness": 80.7,
+      "smoothed_brightness": 80.6,
+      "slide_motion": 15.5,
+      "state": "COVERED"
+    },
+    {
+      "frame": 150,
+      "time_sec": 6.0,
+      "table_brightness": 80.5,
+      "smoothed_brightness": 80.7,
+      "slide_motion": 7.7,
+      "state": "COVERED"
+    },
+    {
+      "frame": 155,
+      "time_sec": 6.2,
+      "table_brightness": 81.2,
+      "smoothed_brightness": 80.9,
+      "slide_motion": 16.8,
+      "state": "COVERED"
+    },
+    {
+      "frame": 160,
+      "time_sec": 6.4,
+      "table_brightness": 82.5,
+      "smoothed_brightness": 81.4,
+      "slide_motion": 8.3,
+      "state": "COVERED"
+    },
+    {
+      "frame": 165,
+      "time_sec": 6.6,
+      "table_brightness": 82.7,
+      "smoothed_brightness": 82.8,
+      "slide_motion": 8.6,
+      "state": "COVERED"
+    },
+    {
+      "frame": 170,
+      "time_sec": 6.8,
+      "table_brightness": 84.1,
+      "smoothed_brightness": 83.3,
+      "slide_motion": 12.9,
+      "state": "COVERED"
+    },
+    {
+      "frame": 175,
+      "time_sec": 7.0,
+      "table_brightness": 98.3,
+      "smoothed_brightness": 87.3,
+      "slide_motion": 8.8,
+      "state": "COVERED"
+    },
+    {
+      "frame": 180,
+      "time_sec": 7.2,
+      "table_brightness": 125.0,
+      "smoothed_brightness": 102.4,
+      "slide_motion": 11.2,
+      "state": "COVERED"
+    },
+    {
+      "frame": 185,
+      "time_sec": 7.4,
+      "table_brightness": 175.2,
+      "smoothed_brightness": 136.5,
+      "slide_motion": 10.8,
+      "state": "COVERED"
+    },
+    {
+      "frame": 190,
+      "time_sec": 7.6,
+      "table_brightness": 75.8,
+      "smoothed_brightness": 125.5,
+      "slide_motion": 12.1,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 195,
+      "time_sec": 7.8,
+      "table_brightness": 107.9,
+      "smoothed_brightness": 93.8,
+      "slide_motion": 23.9,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 200,
+      "time_sec": 8.0,
+      "table_brightness": 142.7,
+      "smoothed_brightness": 114.4,
+      "slide_motion": 16.2,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 205,
+      "time_sec": 8.2,
+      "table_brightness": 159.4,
+      "smoothed_brightness": 144.3,
+      "slide_motion": 30.7,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 210,
+      "time_sec": 8.4,
+      "table_brightness": 156.3,
+      "smoothed_brightness": 156.8,
+      "slide_motion": 23.3,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 215,
+      "time_sec": 8.6,
+      "table_brightness": 149.2,
+      "smoothed_brightness": 154.7,
+      "slide_motion": 14.1,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 220,
+      "time_sec": 8.8,
+      "table_brightness": 142.5,
+      "smoothed_brightness": 149.3,
+      "slide_motion": 4.2,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 225,
+      "time_sec": 9.0,
+      "table_brightness": 130.1,
+      "smoothed_brightness": 141.0,
+      "slide_motion": 10.1,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 230,
+      "time_sec": 9.2,
+      "table_brightness": 112.9,
+      "smoothed_brightness": 127.6,
+      "slide_motion": 6.0,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 235,
+      "time_sec": 9.4,
+      "table_brightness": 103.3,
+      "smoothed_brightness": 111.0,
+      "slide_motion": 8.3,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 240,
+      "time_sec": 9.6,
+      "table_brightness": 94.8,
+      "smoothed_brightness": 101.8,
+      "slide_motion": 8.4,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 245,
+      "time_sec": 9.8,
+      "table_brightness": 79.9,
+      "smoothed_brightness": 92.1,
+      "slide_motion": 7.0,
+      "state": "EXPOSED"
+    },
+    {
+      "frame": 250,
+      "time_sec": 10.0,
+      "table_brightness": 79.5,
+      "smoothed_brightness": 80.9,
+      "slide_motion": 7.0,
+      "state": "COVERED"
+    },
+    {
+      "frame": 255,
+      "time_sec": 10.2,
+      "table_brightness": 79.7,
+      "smoothed_brightness": 79.8,
+      "slide_motion": 16.0,
+      "state": "COVERED"
+    }
+  ]
+}
