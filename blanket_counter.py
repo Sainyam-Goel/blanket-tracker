@@ -67,7 +67,13 @@ SCALE_DRIFT_MARGIN = 1.5       # if loaded diff is within this factor of OFF_THR
 # ── Table detection params ──
 TABLE_TEXTURE_THRESHOLD = 75
 TABLE_SMOOTH_WINDOW = 9
-TABLE_MIN_CYCLE_FRAMES = 10
+TABLE_MIN_CYCLE_FRAMES = 50     # blanket must be on table ≥2s to count as a fold cycle
+TABLE_DEBOUNCE_FRAMES = 5       # rising edge debounce (same logic as scale)
+TABLE_MIN_CYCLE_GAP = 100       # 4s at 25fps — minimum gap between table events
+
+# ── Accept/reject classification params ──
+CLASSIFY_WINDOW_SEC = 10.0      # after table_off, look for scale event within this window
+CLASSIFY_LOOKBACK_SEC = 2.0     # scale event can precede table_off by up to this
 
 # ── Live mode params ──
 LIVE_FRAME_DATA_LIMIT = 5000   # keep last N frame records in memory (~200s at 25fps)
@@ -97,6 +103,12 @@ class BlanketCounter:
         self.table_count = 0
         self.table_covered_frames = 0
         self.table_buffer = deque(maxlen=TABLE_SMOOTH_WINDOW)
+        self.table_consecutive_on = 0       # debounce counter
+        self.last_table_count_frame = -TABLE_MIN_CYCLE_GAP
+
+        # Accept/reject classification
+        self.accepted_count = 0
+        self.rejected_count = 0
 
         # Lighting monitoring
         self.prev_frame_brightness = None
@@ -434,35 +446,56 @@ class BlanketCounter:
         if scale_event:
             self.events.append(scale_event)
 
-        # ── TABLE: texture analysis ──
+        # ── TABLE: texture analysis with debounce + gap filtering ──
         x1, y1, x2, y2 = TABLE_ROI
         table_texture_raw = float(np.std(gray[y1:y2, x1:x2]))
         table_texture = self._smooth(self.table_buffer, table_texture_raw)
 
         table_event = None
-        if self.table_state == 'empty' and table_texture > TABLE_TEXTURE_THRESHOLD:
-            self.table_state = 'covered'
-            self.table_covered_frames = 0
-            table_event = {
-                'type': 'table_blanket_on',
-                'time_sec': round(timestamp, 3),
-                'frame': self.frame_idx,
-                'texture': round(table_texture, 1),
-            }
+        if self.table_state == 'empty':
+            if table_texture > TABLE_TEXTURE_THRESHOLD:
+                self.table_consecutive_on += 1
+                if self.table_consecutive_on >= TABLE_DEBOUNCE_FRAMES:
+                    self.table_state = 'covered'
+                    self.table_covered_frames = self.table_consecutive_on
+                    table_event = {
+                        'type': 'table_blanket_on',
+                        'time_sec': round(timestamp, 3),
+                        'frame': self.frame_idx,
+                        'texture': round(table_texture, 1),
+                    }
+            else:
+                self.table_consecutive_on = 0
+
         elif self.table_state == 'covered':
             self.table_covered_frames += 1
-            if (table_texture < TABLE_TEXTURE_THRESHOLD
-                    and self.table_covered_frames >= TABLE_MIN_CYCLE_FRAMES):
-                self.table_state = 'empty'
-                self.table_count += 1
-                table_event = {
-                    'type': 'table_blanket_off',
-                    'time_sec': round(timestamp, 3),
-                    'frame': self.frame_idx,
-                    'texture': round(table_texture, 1),
-                    'table_cycle_number': self.table_count,
-                    'duration_frames': self.table_covered_frames,
-                }
+            if table_texture < TABLE_TEXTURE_THRESHOLD:
+                # Falling edge — check duration and gap filters
+                gap_frames = self.frame_idx - self.last_table_count_frame
+                gap_ok = gap_frames >= TABLE_MIN_CYCLE_GAP
+                dur_ok = self.table_covered_frames >= TABLE_MIN_CYCLE_FRAMES
+
+                if dur_ok and gap_ok:
+                    self.table_state = 'empty'
+                    self.table_count += 1
+                    self.last_table_count_frame = self.frame_idx
+                    self.table_consecutive_on = 0
+                    table_event = {
+                        'type': 'table_blanket_off',
+                        'time_sec': round(timestamp, 3),
+                        'frame': self.frame_idx,
+                        'texture': round(table_texture, 1),
+                        'table_cycle_number': self.table_count,
+                        'duration_frames': self.table_covered_frames,
+                    }
+                elif not dur_ok:
+                    # Too brief — just reset, don't count
+                    self.table_state = 'empty'
+                    self.table_consecutive_on = 0
+                elif not gap_ok:
+                    # Too close to previous — just reset
+                    self.table_state = 'empty'
+                    self.table_consecutive_on = 0
 
         if table_event:
             self.events.append(table_event)
@@ -594,9 +627,8 @@ class BlanketCounter:
                     f"({dur_frames} frames / {dur_frames / self.fps:.1f}s)"
                 )
 
-        # Cross-validation check
-        scale_table_diff = abs(self.scale_count - self.table_count)
-        cross_valid = scale_table_diff <= max(1, self.scale_count * 0.2)
+        # ── Accept/Reject classification via cross-correlation ──
+        self._classify_blankets()
 
         result = {
             'source': str(self.source),
@@ -615,6 +647,9 @@ class BlanketCounter:
                 'scale_smooth_window': SCALE_SMOOTH_WINDOW,
                 'scale_debounce_frames': SCALE_DEBOUNCE_FRAMES,
                 'table_texture_threshold': TABLE_TEXTURE_THRESHOLD,
+                'table_min_cycle_frames': TABLE_MIN_CYCLE_FRAMES,
+                'table_min_cycle_gap': TABLE_MIN_CYCLE_GAP,
+                'classify_window_sec': CLASSIFY_WINDOW_SEC,
             },
             'results': {
                 'blankets_weighed': self.scale_count,
@@ -622,10 +657,12 @@ class BlanketCounter:
                 'table_cycles': self.table_count,
                 'still_on_table': (self.table_state == 'covered'
                                    and self.table_covered_frames >= TABLE_MIN_CYCLE_FRAMES),
-                'cross_validation': 'PASS' if cross_valid else 'WARN',
+                'accepted': self.accepted_count,
+                'rejected': self.rejected_count,
+                'total_blankets': self.accepted_count + self.rejected_count,
                 'projected_per_hour': (
                     round(self.scale_count / duration * 3600)
-                    if duration > 10 else None  # don't project from <10s of data
+                    if duration > 10 else None
                 ),
             },
             'events': self.events,
@@ -634,6 +671,69 @@ class BlanketCounter:
 
         self._print_summary(result)
         return result
+
+    def _classify_blankets(self):
+        """Cross-correlate scale and table events to classify accepted/rejected.
+
+        Logic:
+        1. Every scale_cycle_complete IS an accepted blanket — no debate.
+           Create blanket_accepted for each one.
+        2. For each table_blanket_off, check if ANY scale event is nearby.
+           If yes → this table cycle is the table-side of that accepted blanket
+           (skip it, already counted above).
+           If no → this is a REJECTED blanket (tossed without weighing).
+        """
+        scale_events = sorted(
+            [e for e in self.events if e['type'] == 'scale_cycle_complete'],
+            key=lambda e: e['time_sec']
+        )
+        table_events = sorted(
+            [e for e in self.events if e['type'] == 'table_blanket_off'],
+            key=lambda e: e['time_sec']
+        )
+        scale_times = [e['time_sec'] for e in scale_events]
+
+        # Step 1: All scale events are accepted
+        for se in scale_events:
+            self.accepted_count += 1
+            self.events.append({
+                'type': 'blanket_accepted',
+                'time_sec': se['time_sec'],
+                'frame': se['frame'],
+                'blanket_number': self.accepted_count,
+                'scale_duration_sec': se.get('on_duration_sec'),
+                'scale_diff': se.get('diff'),
+            })
+
+        # Step 2: Table events with no nearby scale event are rejected
+        for te in table_events:
+            t_off = te['time_sec']
+            # Check if ANY scale event falls within the correlation window
+            has_scale = False
+            for st in scale_times:
+                delta = st - t_off
+                if -CLASSIFY_LOOKBACK_SEC <= delta <= CLASSIFY_WINDOW_SEC:
+                    has_scale = True
+                    break
+                # Early exit: scale times are sorted, so if we've gone past
+                # the window, all remaining will be even further
+                if delta > CLASSIFY_WINDOW_SEC:
+                    break
+
+            if not has_scale:
+                self.rejected_count += 1
+                self.events.append({
+                    'type': 'blanket_rejected',
+                    'time_sec': t_off,
+                    'frame': te['frame'],
+                    'blanket_number': self.rejected_count,
+                    'table_duration_frames': te.get('duration_frames'),
+                    'table_texture': te.get('texture'),
+                })
+
+        print(f"\n  Classification: {self.accepted_count} accepted, "
+              f"{self.rejected_count} rejected, "
+              f"{self.accepted_count + self.rejected_count} total")
 
     def _print_summary(self, result):
         r = result['results']
@@ -644,11 +744,12 @@ class BlanketCounter:
         print(f"  Still on scale at end:      {'Yes' if r['still_on_scale'] else 'No'}")
         print(f"  Table fold cycles:          {r['table_cycles']}")
         print(f"  Still on table at end:      {'Yes' if r['still_on_table'] else 'No'}")
-        print(f"  Scale/Table cross-check:    {r['cross_validation']}")
+        print(f"  ──────────────────────────────────")
+        print(f"  ACCEPTED (weighed):         {r['accepted']}")
+        print(f"  REJECTED (tossed):          {r['rejected']}")
+        print(f"  TOTAL BLANKETS:             {r['total_blankets']}")
         if r['projected_per_hour'] is not None:
-            print(f"  Projected rate:             ~{r['projected_per_hour']}/hr")
-        else:
-            print(f"  Projected rate:             (need >10s of data)")
+            print(f"  Projected rate:             ~{r['projected_per_hour']}/hr (accepted)")
         print(f"{'='*60}\n")
 
 
@@ -682,6 +783,9 @@ def main():
         'total_blankets_weighed': sum(
             r['results']['blankets_weighed'] for r in all_results
         ),
+        'total_accepted': sum(r['results']['accepted'] for r in all_results),
+        'total_rejected': sum(r['results']['rejected'] for r in all_results),
+        'total_blankets': sum(r['results']['total_blankets'] for r in all_results),
     }
 
     Path(args.output).write_text(json.dumps(output, indent=2))
