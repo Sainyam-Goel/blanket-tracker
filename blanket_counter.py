@@ -47,15 +47,22 @@ SCALE_ON_THRESHOLD = 25        # diff must exceed this to trigger "loaded"
 SCALE_OFF_THRESHOLD = 15       # diff must fall below this to trigger "empty"
                                 # hysteresis dead zone [15-25] prevents chattering
 SCALE_SMOOTH_WINDOW = 13       # ~0.52s at 25fps (reduced from 21 to catch fast cycles)
-SCALE_MIN_ON_FRAMES = 5        # blanket must be on scale for ≥0.20s to count
-                                # (debounce already filters hand passes, so this can be low)
+SCALE_MIN_ON_FRAMES = 15       # blanket must be on scale for ≥0.6s to count
+                                # ground truth shows all real blankets are ≥0.68s
 SCALE_DEBOUNCE_FRAMES = 5      # rising edge must be sustained for 5 frames before
                                 # transitioning to "loaded" (filters worker hand passes)
+SCALE_MIN_CYCLE_GAP = 100      # 4s at 25fps — minimum gap between consecutive counts
+                                # ground truth shows real blankets are always ≥5s apart;
+                                # prevents rapid-fire false counting from noise oscillation
 
 # ── Adaptive reference params ──
 SCALE_REF_ADAPT_RATE = 0.005   # blend rate when scale is idle (0.5% per frame)
 SCALE_REF_IDLE_FRAMES = 75     # must be "empty" for 3s before adapting reference
 LIGHTING_JUMP_THRESHOLD = 30   # mean brightness jump > this = lighting change event
+SCALE_MAX_LOADED_FRAMES = 250  # 10s at 25fps — no blanket stays on scale this long;
+                                # if exceeded, assume reference drift and force recalibrate
+SCALE_DRIFT_MARGIN = 1.5       # if loaded diff is within this factor of OFF_THRESHOLD,
+                                # it's likely baseline drift not a real blanket
 
 # ── Table detection params ──
 TABLE_TEXTURE_THRESHOLD = 75
@@ -83,6 +90,7 @@ class BlanketCounter:
         self.scale_ref_brightness = 0   # mean brightness of reference
         self.scale_buffer = deque(maxlen=SCALE_SMOOTH_WINDOW)
         self.warmup_remaining = SCALE_SMOOTH_WINDOW  # frames before state resolution
+        self.last_count_frame = -SCALE_MIN_CYCLE_GAP  # frame of last counted blanket
 
         # Table state machine
         self.table_state = 'empty'
@@ -316,12 +324,63 @@ class BlanketCounter:
 
         elif self.scale_state == 'loaded':
             self.scale_idle_frames = 0
-            # Falling edge: use lower threshold (hysteresis)
-            if scale_diff < SCALE_OFF_THRESHOLD:
-                dur_frames = self.frame_idx - self.scale_on_frame
-                if dur_frames >= SCALE_MIN_ON_FRAMES:
+            dur_frames = self.frame_idx - self.scale_on_frame
+
+            # ── Drift detection: stuck in "loaded" too long ──
+            # No blanket stays on the scale for >10s in normal workflow.
+            # If we're stuck, the reference has drifted.
+            if dur_frames > SCALE_MAX_LOADED_FRAMES:
+                # Check if diff is hovering near the threshold (drift)
+                # vs genuinely high (something really sitting there)
+                is_drift = scale_diff < SCALE_ON_THRESHOLD * SCALE_DRIFT_MARGIN
+                if is_drift:
+                    # Reference has drifted — recalibrate from current frame
+                    self.scale_ref = scale_patch.copy()
+                    self.scale_ref_brightness = float(np.mean(self.scale_ref))
+                    self.scale_buffer.clear()
+                    self.scale_state = 'warmup'
+                    self.warmup_remaining = SCALE_SMOOTH_WINDOW
+                    self.warmup_above_count = 0
+                    self.scale_consecutive_on = 0
+                    # Count the blanket that was legitimately on the scale
+                    # before drift took over (first ~1-2s were real)
+                    gap_ok = (self.frame_idx - self.last_count_frame) >= SCALE_MIN_CYCLE_GAP
+                    if dur_frames > SCALE_MIN_ON_FRAMES and gap_ok:
+                        self.scale_count += 1
+                        self.last_count_frame = self.frame_idx
+                        scale_event = {
+                            'type': 'scale_cycle_complete',
+                            'time_sec': round(timestamp, 3),
+                            'frame': self.frame_idx,
+                            'diff': round(scale_diff, 1),
+                            'blanket_number': self.scale_count,
+                            'on_duration_frames': SCALE_MAX_LOADED_FRAMES,
+                            'on_duration_sec': round(SCALE_MAX_LOADED_FRAMES / self.fps, 2),
+                            'note': 'drift detected, recalibrated',
+                        }
+                    print(
+                        f"  [t={timestamp:6.2f}s f={self.frame_idx:4d}] "
+                        f"DRIFT: Stuck loaded for {dur_frames}f "
+                        f"(diff={scale_diff:.1f}). Recalibrating reference."
+                    )
+                # else: diff is genuinely very high — something is really
+                # sitting there (e.g. pile of blankets placed on scale).
+                # Keep waiting, but warn periodically.
+                elif dur_frames % (SCALE_MAX_LOADED_FRAMES * 2) == 0:
+                    print(
+                        f"  [t={timestamp:6.2f}s f={self.frame_idx:4d}] "
+                        f"WARNING: Scale loaded for {dur_frames}f "
+                        f"(diff={scale_diff:.1f}) — object may be sitting on scale"
+                    )
+
+            # ── Falling edge: use lower threshold (hysteresis) ──
+            elif scale_diff < SCALE_OFF_THRESHOLD:
+                gap_frames = self.frame_idx - self.last_count_frame
+                gap_ok = gap_frames >= SCALE_MIN_CYCLE_GAP
+                if dur_frames >= SCALE_MIN_ON_FRAMES and gap_ok:
                     # Count HERE — on completed cycle, not on loaded transition
                     self.scale_count += 1
+                    self.last_count_frame = self.frame_idx
                     scale_event = {
                         'type': 'scale_cycle_complete',
                         'time_sec': round(timestamp, 3),
@@ -337,7 +396,7 @@ class BlanketCounter:
                         f"(on scale for {dur_frames} frames / "
                         f"{dur_frames / self.fps:.1f}s)"
                     )
-                else:
+                elif dur_frames < SCALE_MIN_ON_FRAMES:
                     # Too brief — likely a hand pass, not a real blanket
                     scale_event = {
                         'type': 'scale_false_trigger',
@@ -345,11 +404,29 @@ class BlanketCounter:
                         'frame': self.frame_idx,
                         'diff': round(scale_diff, 1),
                         'rejected_duration_frames': dur_frames,
+                        'reject_reason': 'too_brief',
                     }
                     print(
                         f"  [t={timestamp:6.2f}s f={self.frame_idx:4d}] "
                         f"SCALE: Rejected brief trigger "
                         f"({dur_frames} frames < {SCALE_MIN_ON_FRAMES} min)"
+                    )
+                elif not gap_ok:
+                    # Too close to previous count — noise oscillation
+                    scale_event = {
+                        'type': 'scale_false_trigger',
+                        'time_sec': round(timestamp, 3),
+                        'frame': self.frame_idx,
+                        'diff': round(scale_diff, 1),
+                        'rejected_duration_frames': dur_frames,
+                        'reject_reason': 'too_close',
+                        'gap_sec': round(gap_frames / self.fps, 2),
+                    }
+                    print(
+                        f"  [t={timestamp:6.2f}s f={self.frame_idx:4d}] "
+                        f"SCALE: Rejected — too close to previous "
+                        f"({gap_frames / self.fps:.1f}s < "
+                        f"{SCALE_MIN_CYCLE_GAP / self.fps:.1f}s min)"
                     )
                 self.scale_state = 'empty'
                 self.scale_consecutive_on = 0
@@ -500,7 +577,8 @@ class BlanketCounter:
         still_on_scale = self.scale_state == 'loaded'
         if still_on_scale:
             dur_frames = self.frame_idx - self.scale_on_frame
-            if dur_frames >= SCALE_MIN_ON_FRAMES:
+            gap_ok = (self.frame_idx - self.last_count_frame) >= SCALE_MIN_CYCLE_GAP
+            if dur_frames >= SCALE_MIN_ON_FRAMES and gap_ok:
                 self.scale_count += 1
                 self.events.append({
                     'type': 'scale_cycle_complete',
