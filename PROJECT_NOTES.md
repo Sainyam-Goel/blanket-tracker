@@ -15,6 +15,31 @@ Worker B throws blanket on table → A & B fold → A places on scale → checks
 - **Tosses RIGHT** if rejected (not weighed properly, bad quality/weight)
 - Worker B may overlap next blanket on table during weighing
 
+### Visual Patterns for Accepted vs Rejected
+- **Accepted blankets are ALWAYS fully folded** before being placed on the scale. The folded blanket sits as a neat rectangular bundle on the platform (pics 1 & 2 from user).
+- **Rejected blankets are NEVER folded**. The worker tears the tag off the unfolded blanket and throws it to the right (pic 3 from user). The blanket is still spread/bunched, not a neat rectangle.
+- This means the folding table activity pattern should differ: accepted blankets have a complete fold cycle (longer table coverage, neater texture), rejected blankets may have shorter/messier table signals since folding is aborted partway.
+- **THE KEY INDICATOR: The final fold.** Accepted blankets ALWAYS get a complete final fold (compact layered rectangle). Rejected blankets NEVER get the final fold — the worker aborts folding, tears the tag, and throws it away. If we can detect whether the final fold happened on the table, that's the definitive accepted/rejected signal.
+- **Reject pile is NOT reliable** — its location varies and blankets get regularly taken away. Do NOT use a reject pile ROI.
+- **Better approach: Track the acceptance pile** (where folded blankets land after weighing, tossed left by worker A). Check if a folded blanket was thrown there after a table cycle. The acceptance pile is more stable/predictable than the reject pile.
+- **Detection ideas**:
+  1. Table texture pattern change: final fold creates a compact, high-texture rectangle vs spread-out blanket. The texture std signature should be different (sharp rise then stable high plateau for folded vs gradual messy signal for unfolded).
+  2. Acceptance pile ROI: monitor the area where accepted blankets land. A new item appearing = confirmed acceptance.
+  3. Shape analysis: folded blanket = compact rectangular blob in table ROI. Unfolded = spread across most of the ROI.
+
+### Rejection Sequence (from reject.mp4, 10.5s clip)
+Observed frame-by-frame from `/Users/sai/Downloads/reject.mp4`:
+1. **t=0s**: Blanket spread flat on table, both workers visible. Scale empty (diff=0.3).
+2. **t=2-3s**: Worker A inspects blanket, decides to reject. Blanket still unfolded.
+3. **t=4-5s**: Worker A pulls blanket off table toward himself — NOT folding, dragging it off.
+4. **t=6-7s**: Worker A throws blanket DOWN/LEFT onto reject pile on floor. Blanket flies through air, unfolded.
+5. **t=7-8s**: Blanket lands on floor pile. Scale never touched (peak diff only 9.2).
+6. **t=9-10s**: Workers reset, next blanket arriving on table.
+
+**Critical observation**: The reject pile location varies and blankets get taken away regularly — NOT a reliable detection target. The acceptance pile (where folded blankets land after weighing) is more stable and predictable.
+
+**Signal during rejection**: Scale diff peaked at only 9.2 (well below 25 ON threshold). Table texture barely fluctuated (72-75 range, hovering near threshold). The rejection happens quickly (~3-4s from decision to throw) and leaves almost no signal on either detector — this explains why 7/22 rejected blankets were completely undetected.
+
 ## Detection ROIs (1920x1080 CH21)
 - **Scale**: (1440, 440, 1520, 500) — 80x60 pixel crop of weighing platform (far right of frame)
 - **Table**: (980, 340, 1240, 450) — folding table top surface (center-right of frame)
@@ -199,24 +224,84 @@ Worker B throws blanket on table → A & B fold → A places on scale → checks
 
 ---
 
+## ROI & Feature Diagnostic (Session 3)
+
+### Motion Heatmap Analysis
+Computed average motion heatmaps (|frame_after - frame_before|) for accepted vs rejected events:
+- **Accepted motion**: Concentrated in bottom-center of frame (y:700+) = acceptance pile area
+- **Rejected motion**: Concentrated around table area (worker throwing action)
+- **Worker body motion dominates ALL candidate ROIs** near the table/scale → ROI-based landing zone detection not viable
+
+### Candidate ROIs Tested (9 regions)
+| ROI | Accepted | Rejected | Separation |
+|-----|----------|----------|------------|
+| far_right (1550,380,1750,560) | 12.6 | 10.8 | 1.09 |
+| floor_center (1100,550,1350,720) | 39.7 | 50.3 | 0.87 |
+| alz_tight (1280,520,1440,660) | 54.8 | 72.4 | 0.84 |
+| alz_wide (1200,500,1460,700) | 55.0 | 65.9 | 0.76 |
+| scale (1440,440,1520,500) | 16.1 | 10.6 | 0.42 |
+| table (980,340,1240,450) | 43.7 | 44.7 | 0.05 |
+
+**Conclusion**: No single ROI provides clean discrimination. Worker motion noise is the main obstacle.
+
+### Feature Analysis (Diagnostic at GT Timestamps)
+| Feature | Accepted (mean±std) | Rejected (mean±std) | Separation |
+|---------|---------------------|---------------------|------------|
+| peak_scale_diff | 87.3±11.1 | 21.9±20.2 | **4.18** |
+| texture_slope_2s | -12.5±9.6 | -0.2±10.3 | **1.24** |
+| peak_texture | 97.5±6.2 | 88.8±9.4 | **1.12** |
+| final_texture | 67.8±6.4 | 75.3±8.1 | **1.03** |
+| above_duration | 5.2±1.3 | 5.0±2.2 | 0.15 |
+
+### Texture Slope: Why It Didn't Work in Production
+- At GT timestamps (frame-seeking): accepted slope mean = -12.5, clear separation
+- At detected table_blanket_off events (live tracking): slopes much weaker (-1.2 to -6.8)
+- Reason: smoothing buffer dampens rapid changes; cycle dynamics differ from point-in-time measurement
+- A threshold of -5.0 on table cycle slope misclassified 170/223 scale events as "weight-rejected"
+- **Fix needed**: Compute slope only over LAST 0.5s of cycle, not last 2s. The lift signal is brief.
+
+### Weight-Rejected Blankets (4 events: 2:33, 6:56, 10:33, 58:14)
+These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weight.
+- Scale duration: 1.4s, 3.2s, 1.6s, 9.0s
+- Texture slope at GT: +0.5, -0.1, +0.6, +1.3 (all near zero vs accepted -12.5)
+- Currently indistinguishable from accepted using scale data alone
+- Post-scale directional motion analysis is impractical (worker motion noise)
+
+---
+
+## Version History
+
+| Version | Changes | Results |
+|---------|---------|---------|
+| v1 | Scale-only detection | 223 accepted, no reject detection |
+| v2 | Scale + table detection | 223 scale + 951 table cycles (73% noise) |
+| v3 | Improved table (debounce, min duration 2s, gap 4s) + accept/reject classification | 223 acc + 86 rej = 309 total. 92% accepted, 50% rejected recall. |
+| v4 | Table min duration 1.2s, texture profiling (peak, slope) as metadata | 223 acc + 103 rej = 326 total. 92% accepted, 50% rejected recall. More table events, same GT match. |
+
+---
+
 ## Roadmap / Next Steps
 
-1. **Improve rejected detection**:
-   - Add "reject pile" ROI (right side of table area) to detect directional toss motion
-   - This would catch rejected blankets that skip the scale entirely
-   - Alternatively: track motion vectors after table_off to detect LEFT vs RIGHT toss
+1. **Better texture slope computation**:
+   - Current: slope over last 2s of table cycle → too noisy
+   - Needed: slope over last 0.5s only, or rate-of-change at the exact moment of lift
+   - Could significantly improve weight-rejection detection (catches 4 currently missed events)
 
-2. **Live counting from RTSP feeds** (primary goal):
+2. **ML classifier approach**:
+   - With labeled data (peak_texture, texture_slope, scale_diff, duration, above_segments)
+   - Even a simple logistic regression or decision tree could improve on threshold-based rules
+   - Need more GT data for training/validation
+
+3. **Live counting from RTSP feeds** (primary goal):
    - `--live` flag already exists with reconnection logic
    - Need: RTSP URL for CH21, machine on same network
    - Dashboard would need periodic JSON refresh or WebSocket
 
-3. **WhatsApp alerts**: Significant events/changes notification
+4. **WhatsApp alerts**: Significant events/changes notification
 
-4. **Improve accepted recall** (92% → 95%+):
+5. **Improve accepted recall** (92% → 95%+):
    - Adaptive thresholds during man-blocking periods
    - Lower ON_THRESHOLD when man detected (accept lower diffs)
-   - Train simple classifier on accepted vs noise patterns
 
 ---
 
@@ -237,3 +322,7 @@ Worker B throws blanket on table → A & B fold → A places on scale → checks
 7. **Some rejected blankets ARE weighed**: 4/22 rejected blankets went on the scale (worker checked weight, then rejected). These are indistinguishable from accepted blankets using only scale data.
 
 8. **Ground truth corrections matter hugely**: Initial "43 extra detections" turned out to be mostly real blankets once the ground truth was expanded. Always verify GT thoroughly.
+
+9. **Diagnostic at GT timestamps ≠ actual detection signals**: Texture slope measured at GT timestamps (frame-seeking) showed clear separation (1.24). But the same feature computed during live table cycle tracking was much weaker due to smoothing, cycle dynamics, and overlap. Always validate features in the actual processing pipeline.
+
+10. **Worker body motion is the #1 noise source**: All ROIs near the workspace are dominated by worker movement. Any motion-based feature must account for this.

@@ -67,13 +67,21 @@ SCALE_DRIFT_MARGIN = 1.5       # if loaded diff is within this factor of OFF_THR
 # ── Table detection params ──
 TABLE_TEXTURE_THRESHOLD = 75
 TABLE_SMOOTH_WINDOW = 9
-TABLE_MIN_CYCLE_FRAMES = 50     # blanket must be on table ≥2s to count as a fold cycle
+TABLE_MIN_CYCLE_FRAMES = 30     # blanket must be on table ≥1.2s to count as a fold cycle
 TABLE_DEBOUNCE_FRAMES = 5       # rising edge debounce (same logic as scale)
 TABLE_MIN_CYCLE_GAP = 100       # 4s at 25fps — minimum gap between table events
 
 # ── Accept/reject classification params ──
 CLASSIFY_WINDOW_SEC = 10.0      # after table_off, look for scale event within this window
 CLASSIFY_LOOKBACK_SEC = 2.0     # scale event can precede table_off by up to this
+
+# ── Table texture profile params (for fold quality analysis) ──
+TABLE_TEXTURE_HISTORY = 50      # store last 50 texture values (2s at 25fps) during table cycle
+TABLE_SLOPE_WINDOW = 50         # frames for texture slope computation (2s)
+# Texture slope thresholds for classification:
+# Accepted blankets show steep negative slope (mean -12.5) as blanket is lifted to scale.
+# Rejected blankets show flat slope (mean -0.2) as blanket is pulled/thrown off.
+TEXTURE_SLOPE_LIFT_THRESHOLD = -5.0   # slope below this = blanket lifted (going to scale)
 
 # ── Live mode params ──
 LIVE_FRAME_DATA_LIMIT = 5000   # keep last N frame records in memory (~200s at 25fps)
@@ -105,6 +113,8 @@ class BlanketCounter:
         self.table_buffer = deque(maxlen=TABLE_SMOOTH_WINDOW)
         self.table_consecutive_on = 0       # debounce counter
         self.last_table_count_frame = -TABLE_MIN_CYCLE_GAP
+        self.table_texture_history = deque(maxlen=TABLE_TEXTURE_HISTORY)
+        self.table_peak_texture = 0.0       # max texture during current cycle
 
         # Accept/reject classification
         self.accepted_count = 0
@@ -458,6 +468,8 @@ class BlanketCounter:
                 if self.table_consecutive_on >= TABLE_DEBOUNCE_FRAMES:
                     self.table_state = 'covered'
                     self.table_covered_frames = self.table_consecutive_on
+                    self.table_texture_history.clear()
+                    self.table_peak_texture = table_texture
                     table_event = {
                         'type': 'table_blanket_on',
                         'time_sec': round(timestamp, 3),
@@ -469,6 +481,9 @@ class BlanketCounter:
 
         elif self.table_state == 'covered':
             self.table_covered_frames += 1
+            self.table_texture_history.append(table_texture)
+            self.table_peak_texture = max(self.table_peak_texture, table_texture)
+
             if table_texture < TABLE_TEXTURE_THRESHOLD:
                 # Falling edge — check duration and gap filters
                 gap_frames = self.frame_idx - self.last_table_count_frame
@@ -476,6 +491,9 @@ class BlanketCounter:
                 dur_ok = self.table_covered_frames >= TABLE_MIN_CYCLE_FRAMES
 
                 if dur_ok and gap_ok:
+                    # Compute texture slope from history (last 2s)
+                    texture_slope = self._compute_texture_slope()
+
                     self.table_state = 'empty'
                     self.table_count += 1
                     self.last_table_count_frame = self.frame_idx
@@ -487,6 +505,8 @@ class BlanketCounter:
                         'texture': round(table_texture, 1),
                         'table_cycle_number': self.table_count,
                         'duration_frames': self.table_covered_frames,
+                        'peak_texture': round(self.table_peak_texture, 1),
+                        'texture_slope': round(texture_slope, 2),
                     }
                 elif not dur_ok:
                     # Too brief — just reset, don't count
@@ -513,6 +533,33 @@ class BlanketCounter:
         self.frame_data.append(record)
         self.frame_idx += 1
         return record
+
+    def _compute_texture_slope(self):
+        """Compute texture slope from the end of a table cycle.
+
+        Uses the last TABLE_SLOPE_WINDOW frames of texture history.
+        Negative slope = texture dropping = blanket being lifted (going to scale).
+        Flat/positive slope = blanket being pulled/thrown off (rejection).
+
+        Returns slope in texture units per second.
+        """
+        history = list(self.table_texture_history)
+        if len(history) < 10:
+            return 0.0
+
+        # Use last TABLE_SLOPE_WINDOW frames (or all if fewer)
+        window = history[-min(TABLE_SLOPE_WINDOW, len(history)):]
+
+        # Split into first half and second half, compare means
+        mid = len(window) // 2
+        first_half = np.mean(window[:mid])
+        second_half = np.mean(window[mid:])
+
+        # Slope = change per second
+        duration_sec = len(window) / self.fps
+        if duration_sec > 0:
+            return (second_half - first_half) / duration_sec
+        return 0.0
 
     def _reconnect(self, cap):
         """Handle stream reconnection with proper state reset."""
@@ -650,6 +697,7 @@ class BlanketCounter:
                 'table_min_cycle_frames': TABLE_MIN_CYCLE_FRAMES,
                 'table_min_cycle_gap': TABLE_MIN_CYCLE_GAP,
                 'classify_window_sec': CLASSIFY_WINDOW_SEC,
+                'texture_slope_lift_threshold': TEXTURE_SLOPE_LIFT_THRESHOLD,
             },
             'results': {
                 'blankets_weighed': self.scale_count,
@@ -676,12 +724,15 @@ class BlanketCounter:
         """Cross-correlate scale and table events to classify accepted/rejected.
 
         Logic:
-        1. Every scale_cycle_complete IS an accepted blanket — no debate.
+        1. Every scale_cycle_complete IS an accepted blanket.
            Create blanket_accepted for each one.
         2. For each table_blanket_off, check if ANY scale event is nearby.
            If yes → this table cycle is the table-side of that accepted blanket
            (skip it, already counted above).
            If no → this is a REJECTED blanket (tossed without weighing).
+
+        Table texture profile data (peak_texture, texture_slope) is stored as
+        metadata on events for analysis but not yet used for classification.
         """
         scale_events = sorted(
             [e for e in self.events if e['type'] == 'scale_cycle_complete'],
@@ -693,9 +744,26 @@ class BlanketCounter:
         )
         scale_times = [e['time_sec'] for e in scale_events]
 
+        # Helper: find nearest table cycle to a scale event
+        def find_nearby_table(scale_time):
+            """Find the nearest table cycle to a scale event."""
+            best = None
+            best_dist = float('inf')
+            for te in table_events:
+                delta = te['time_sec'] - scale_time
+                if -CLASSIFY_LOOKBACK_SEC <= delta <= CLASSIFY_WINDOW_SEC:
+                    dist = abs(delta)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best = te
+                elif delta > CLASSIFY_WINDOW_SEC:
+                    break
+            return best
+
         # Step 1: All scale events are accepted
         for se in scale_events:
             self.accepted_count += 1
+            nearby_table = find_nearby_table(se['time_sec'])
             self.events.append({
                 'type': 'blanket_accepted',
                 'time_sec': se['time_sec'],
@@ -703,20 +771,19 @@ class BlanketCounter:
                 'blanket_number': self.accepted_count,
                 'scale_duration_sec': se.get('on_duration_sec'),
                 'scale_diff': se.get('diff'),
+                'texture_slope': nearby_table.get('texture_slope') if nearby_table else None,
+                'peak_texture': nearby_table.get('peak_texture') if nearby_table else None,
             })
 
         # Step 2: Table events with no nearby scale event are rejected
         for te in table_events:
             t_off = te['time_sec']
-            # Check if ANY scale event falls within the correlation window
             has_scale = False
             for st in scale_times:
                 delta = st - t_off
                 if -CLASSIFY_LOOKBACK_SEC <= delta <= CLASSIFY_WINDOW_SEC:
                     has_scale = True
                     break
-                # Early exit: scale times are sorted, so if we've gone past
-                # the window, all remaining will be even further
                 if delta > CLASSIFY_WINDOW_SEC:
                     break
 
@@ -729,6 +796,9 @@ class BlanketCounter:
                     'blanket_number': self.rejected_count,
                     'table_duration_frames': te.get('duration_frames'),
                     'table_texture': te.get('texture'),
+                    'peak_texture': te.get('peak_texture'),
+                    'texture_slope': te.get('texture_slope'),
+                    'reject_reason': 'no_scale',
                 })
 
         print(f"\n  Classification: {self.accepted_count} accepted, "

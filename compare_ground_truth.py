@@ -148,6 +148,16 @@ def analyze(json_path):
             print(f"  Accepted GT detected as rejected: {len(misclass_acc)}")
             print(f"  Times: {[fmt(gt) for gt, _, _ in misclass_acc]}")
 
+        # Show weight-rejected events
+        weight_rej = [e for e in blanket_rejected if e.get("reject_reason") == "weight_rejected"]
+        no_scale_rej = [e for e in blanket_rejected if e.get("reject_reason") == "no_scale"]
+        if weight_rej:
+            print(f"\n  --- WEIGHT-REJECTED ({len(weight_rej)}) ---")
+            for wr in weight_rej:
+                print(f"    {fmt(wr['time_sec'])} "
+                      f"(scale_diff={wr.get('scale_diff', '?')}, "
+                      f"slope={wr.get('texture_slope', '?')})")
+
         # Extra rejected in analyzed range
         rej_in_analyzed = [t for t in rej_times if in_analyzed(t)]
         rej_in_middle = [t for t in rej_times if not in_analyzed(t)]
@@ -157,6 +167,10 @@ def analyze(json_path):
         print(f"  In analyzed range: {len(rej_in_analyzed)} detected "
               f"(GT: {len(REJECTED_TIMESTAMPS)})")
         print(f"  In middle (unverified): {len(rej_in_middle)}")
+        if weight_rej:
+            print(f"  Weight-rejected: {len(weight_rej)}")
+        if no_scale_rej:
+            print(f"  No-scale rejected: {len(no_scale_rej)}")
 
     # ── Region breakdown for scale events ──
     scale_in_analyzed = [t for t in scale_times if in_analyzed(t)]
