@@ -380,6 +380,102 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ---
 
+## Dashboard v3.0 — Dual Camera (CH19 + CH21)
+
+### Overview
+- **File**: `blanket_tracker_dashboard.html` (~550KB, self-contained)
+- **Generator**: `generate_dashboard.py` — reads both JSON data files, compacts, generates HTML
+- **Regenerate**: `python3 generate_dashboard.py`
+- **Rendering**: Native Canvas API charts, no external JS libraries
+- **Theme**: Dark (CSS variables), fonts: Syne + JetBrains Mono
+
+### Data Embedding
+The generator script (`generate_dashboard.py`) does the following:
+1. Reads `cutting_full_v2.json` (CH19, 743KB) and `blanket_count_1hr_v4.json` (CH21, 22MB)
+2. Compacts CH19 `frame_data` by taking every 4th entry (3595 → 899 samples)
+3. Compacts CH21 `frames` by taking every 100th entry (89817 → 899 samples)
+4. Embeds as single `DASHBOARD_DATA` JS object with `ch19` and `ch21` sub-objects
+5. Total embedded data: ~510KB
+
+**Embedded data structure:**
+```javascript
+const D = {
+  generated_at: "...",
+  ch19: {
+    metadata: { video, fps, duration_sec, total_frames },
+    config: { table_roi, deriv_threshold, ... },
+    summary: { total_cuts, active_time_sec, break_time_sec, cuts_per_minute, avg_cycle_sec },
+    events: [ /* 333 cut events */ ],
+    breaks: [ /* 19 break start/end pairs */ ],
+    frame_data: [ /* ~899 sampled entries with brightness, derivative, slide_motion */ ]
+  },
+  ch21: {
+    video_info: { width, height, fps, total_frames, duration_sec },
+    detection_config: { scale ROIs, thresholds },
+    results: { accepted: 223, rejected: 103, total_blankets: 326 },
+    source: "video filename",
+    events: [ /* 2183 events: scale_cycle_complete, blanket_accepted, blanket_rejected, table_blanket_on/off */ ],
+    frames: [ /* ~899 sampled entries with scale_diff, scale_state, table_texture, table_state */ ]
+  }
+};
+```
+
+### Layout Structure
+```
+Header (title + CH19/CH21 duration badges)
+├── KPI Split (.kpi-split → 2-column grid)
+│   ├── Left: CH19 Cutting (.kpi-group with amber header)
+│   │   └── 2×2 cards: Cuts Detected, Cut Rate, Avg Cycle, Breaks
+│   └── Right: CH21 Weighing (.kpi-group with blue header)
+│       └── 2×2 cards: Accepted, Rejected, Finish Rate, Reject Rate
+├── Combined Production Timeline (canvas, 300px)
+│   └── Dual Y-axes: CH19 cuts (amber, left) + CH21 blankets (green, right)
+├── Signal Charts (.signal-row → 2-column)
+│   ├── CH19: Brightness derivative + threshold + cut markers + break bands
+│   └── CH21: Table texture + scale diff + blanket markers + loaded-state shading
+├── Production Breakdown (canvas, 220px)
+│   └── Grouped bars per 5-min: amber=cuts, purple=accepted, red=rejected
+├── Session Summary (.summary-grid → 2-column cards)
+│   ├── CH19: Total Cuts, Active Rate, Avg Cycle, Active Time, Breaks, Duration
+│   └── CH21: Total Blankets, Accepted, Rejected, Reject Rate, Hourly Rate, Avg Cycle, Peak, Table Cycles, Duration
+└── Footer (version + generated timestamp)
+```
+
+### Key JavaScript Functions
+| Function | Canvas ID | Description |
+|----------|-----------|-------------|
+| `drawTimeline()` | `chart-timeline` | Combined dual-axis cumulative step function. Left Y = CH19 cuts (amber), Right Y = CH21 blankets (green). Break bands, rejected ticks, idle gap shading. |
+| `drawCH19Signal()` | `chart-ch19-signal` | CH19 brightness derivative over time. Amber fill+line, red dashed threshold, cut count markers (every 50th), break bands. |
+| `drawCH21Signal()` | `chart-ch21-signal` | CH21 table texture (blue) + scale diff (amber). Loaded-state blue shading, ON threshold line, blanket count markers (every 50th). |
+| `drawBreakdown()` | `chart-breakdown` | 3-series grouped bars per 5-min bucket. Amber = CH19 cuts, Purple = CH21 accepted, Red = CH21 rejected. Count labels above bars. |
+| `renderSummary()` | (HTML) | Builds two summary cards from computed stats. No canvas — direct innerHTML. |
+| `setupCanvas(id, h)` | — | Helper: initializes canvas with DPR scaling for retina displays. |
+| `drawTimeAxis()` | — | Helper: adaptive time labels (s/m/h based on duration). |
+| `drawGridH()` | — | Helper: horizontal grid lines with Y-value labels. |
+| `animateCount(el, target, dur, dec)` | — | Eased number animation for KPI cards. |
+
+### CSS Architecture
+| Component | Class | Description |
+|-----------|-------|-------------|
+| Camera groups | `.kpi-split` | 2-column grid separating CH19 (left) and CH21 (right) |
+| Group container | `.kpi-group` | Surface-colored box with header (dot + title + duration) |
+| KPI cards | `.kpi-card.amber/green/red/blue/purple` | Card with colored 2px top accent bar |
+| Chart panels | `.panel > .panel-header + .panel-body` | Container with title bar and tag badge |
+| Signal layout | `.signal-row` | 2-column grid for side-by-side signal charts |
+| Summary layout | `.summary-grid > .summary-card` | 2-column grid, stat rows with label/value |
+| Camera tags | `.tag-ch19`, `.tag-ch21`, `.tag-combined` | Colored badge pills in panel headers |
+| Theme vars | `--bg`, `--surface`, `--card`, `--border`, `--ch19`, `--ch21`, `--accent`, `--accent3`, `--red` | Dark theme color system |
+
+### Dashboard Files
+| File | Purpose |
+|------|---------|
+| `generate_dashboard.py` | Generator script — reads JSON, compacts, writes HTML |
+| `blanket_tracker_dashboard.html` | Generated output (~550KB, self-contained) |
+| `cutting_full_v2.json` | CH19 source data (333 cuts, 743KB) |
+| `blanket_count_1hr_v4.json` | CH21 source data (223 acc + 103 rej, 22MB) |
+
+---
+
 ## Key Learnings
 
 1. **Reference-frame comparison beats motion detection**: MOG2/optical flow is too noisy for production counting. Simple mean-absolute-diff against a learned reference is far more reliable.
