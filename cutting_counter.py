@@ -1,10 +1,32 @@
 """
 CH19 Cutting Counter — Counts blanket cuts from NVR camera feed.
 
-Detection approach: Brightness derivative spike detection.
+Detection approach (v5): Multi-scale derivative + multi-ROI + close-pair merge.
+
   When a cut piece slides off the table, the white surface is exposed,
   causing a rapid brightness INCREASE in the table ROI. We detect these
   positive derivative spikes as cut events.
+
+  Multi-scale detection:
+  - TWO derivative windows run in parallel:
+    * d_long (35 frames / 1.4s) — catches strong 4-worker cuts
+    * d_short (25 frames / 1.0s) — catches rapid 2-worker scissor cuts
+  - EITHER window crossing its threshold triggers a cut detection
+
+  Robustness guardrails (v5):
+  - Echo suppression: removes weak detections following a stronger event
+  - Close-pair merge: when two events fire within 2.5s and at least one
+    has strong deriv (>30), they're the same physical event — keep the
+    stronger detection. 2-worker consecutive cuts (both weak, deriv <25)
+    pass through unaffected.
+  - Multi-ROI tracking: primary (right table), secondary (left table),
+    slide (below table edge). Left-ROI derivative and spatial uniformity
+    (brightness std) are stored as metadata for confidence scoring.
+  - Brightness ceiling: detections with very high brightness (>230) during
+    non-break periods are flagged (likely break transitions, not real cuts).
+
+  Confidence scoring uses: peak_deriv, spike_duration, slide_motion,
+  spatial_std, and left-ROI agreement to produce high/medium/low rating.
 
 This approach is color-agnostic: it detects CHANGE rather than absolute
 brightness, so it works regardless of blanket color.
@@ -27,29 +49,47 @@ from collections import deque
 #  CONFIG
 # ═══════════════════════════════════════════════════════════════
 
-# Table ROI — right portion of white table surface
+# ── ROIs ──
+# Primary table ROI — right portion of white table surface
 TABLE_ROI = (820, 240, 1020, 360)
-
+# Secondary table ROI — left portion (cross-validation)
+LEFT_TABLE_ROI = (600, 240, 820, 360)
 # Slide ROI — below table front edge (motion confirmation metadata)
 SLIDE_ROI = (720, 370, 960, 520)
 
-# Smoothing
-SMOOTH_WINDOW = 10          # frames for brightness running average (~0.4s at 25fps)
+# ── Smoothing ──
+SMOOTH_WINDOW = 7           # frames for brightness running average (~0.28s at 25fps)
 
-# Derivative detection
-DERIV_WINDOW = 50           # frames for derivative computation (~2s at 25fps)
-DERIV_THRESHOLD = 20.0      # minimum brightness increase over 2s to count as cut
-DERIV_CONFIRM_FRAMES = 3    # derivative must stay above threshold for N frames
+# ── Multi-scale derivative detection ──
+DERIV_WINDOW_LONG = 35      # long window (~1.4s) — strong 4-worker cuts
+DERIV_WINDOW_SHORT = 25     # short window (~1.0s) — fast 2-worker scissor cuts
+DERIV_THRESHOLD_LONG = 18.0   # threshold for long window
+DERIV_THRESHOLD_SHORT = 10.0  # threshold for short window (catches weak 2-worker signals)
+DERIV_STRONG_THRESHOLD = 30.0  # strong spike — needs fewer confirm frames
+DERIV_CONFIRM_FRAMES = 2    # derivative must stay above threshold for N frames
+DERIV_CONFIRM_STRONG = 1    # confirm frames needed for strong spikes (>30)
 
-# Gap filter
-MIN_CYCLE_FRAMES = 75       # min 3s gap between cuts
+# ── Gap filter ──
+MIN_CYCLE_FRAMES = 50       # min 2.0s gap between cuts (2-worker cuts can be 2s apart)
 
-# Break detection
+# ── Echo suppression — removes "bounce" detections after strong events ──
+ECHO_WINDOW_SEC = 3.0       # look back this far for stronger preceding events
+ECHO_RATIO = 0.6            # suppress if deriv < 60% of preceding event's deriv
+
+# ── Close-pair merge — removes double-detections of same physical event ──
+CLOSE_PAIR_GAP = 2.5        # max gap (seconds) to consider events as same physical event
+CLOSE_PAIR_DERIV = 30.0     # merge only if at least one event has deriv above this
+                             # (2-worker consecutive cuts have deriv <25, so they pass through)
+
+# ── Brightness ceiling — flag high-brightness detections ──
+BRIGHTNESS_CEILING = 230    # above this, flag as possible break transition
+
+# ── Break detection ──
 BREAK_BRIGHTNESS = 235      # brightness above this = empty table
 BREAK_HOLD_FRAMES = 75      # must sustain for 3s to confirm break
 BREAK_EXIT_FRAMES = 25      # must drop below for 1s to exit break
 
-# Output
+# ── Output ──
 FRAME_SAMPLE_RATE = 25      # store frame_data every N frames (1 per second)
 
 
@@ -63,21 +103,36 @@ class CuttingCounter:
 
         # Config overrides
         self.table_roi = config.get("table_roi", TABLE_ROI)
+        self.left_table_roi = config.get("left_table_roi", LEFT_TABLE_ROI)
         self.slide_roi = config.get("slide_roi", SLIDE_ROI)
         self.smooth_window = config.get("smooth_window", SMOOTH_WINDOW)
-        self.deriv_window = config.get("deriv_window", DERIV_WINDOW)
-        self.deriv_threshold = config.get("deriv_threshold", DERIV_THRESHOLD)
+        self.deriv_window_long = config.get("deriv_window_long", DERIV_WINDOW_LONG)
+        self.deriv_window_short = config.get("deriv_window_short", DERIV_WINDOW_SHORT)
+        self.deriv_threshold_long = config.get("deriv_threshold_long", DERIV_THRESHOLD_LONG)
+        self.deriv_threshold_short = config.get("deriv_threshold_short", DERIV_THRESHOLD_SHORT)
+        self.deriv_strong_threshold = config.get("deriv_strong_threshold", DERIV_STRONG_THRESHOLD)
         self.deriv_confirm = config.get("deriv_confirm", DERIV_CONFIRM_FRAMES)
+        self.deriv_confirm_strong = config.get("deriv_confirm_strong", DERIV_CONFIRM_STRONG)
         self.min_cycle = config.get("min_cycle", MIN_CYCLE_FRAMES)
         self.break_brightness = config.get("break_brightness", BREAK_BRIGHTNESS)
         self.break_hold = config.get("break_hold", BREAK_HOLD_FRAMES)
         self.break_exit = config.get("break_exit", BREAK_EXIT_FRAMES)
+        self.echo_window_sec = config.get("echo_window_sec", ECHO_WINDOW_SEC)
+        self.echo_ratio = config.get("echo_ratio", ECHO_RATIO)
+        self.close_pair_gap = config.get("close_pair_gap", CLOSE_PAIR_GAP)
+        self.close_pair_deriv = config.get("close_pair_deriv", CLOSE_PAIR_DERIV)
+        self.brightness_ceiling = config.get("brightness_ceiling", BRIGHTNESS_CEILING)
         self.sample_rate = config.get("sample_rate", FRAME_SAMPLE_RATE)
         self.debug = config.get("debug", False)
 
-        # Brightness tracking
+        # Brightness tracking — buffer must hold longest derivative window
         self.brightness_buffer = deque(maxlen=self.smooth_window)
-        self.smoothed_history = deque(maxlen=self.deriv_window + 10)
+        max_window = max(self.deriv_window_long, self.deriv_window_short)
+        self.smoothed_history = deque(maxlen=max_window + 10)
+
+        # Left-table ROI tracking (secondary signal for cross-validation)
+        self.left_brightness_buffer = deque(maxlen=self.smooth_window)
+        self.left_smoothed_history = deque(maxlen=max_window + 10)
 
         # Derivative spike detection state
         self.last_cut_frame = -self.min_cycle
@@ -96,6 +151,10 @@ class CuttingCounter:
         self.prev_slide_region = None
         self.slide_motion_peak = 0
 
+        # Multi-ROI tracking for current spike
+        self.spike_left_deriv_peak = 0
+        self.spike_spatial_std_at_peak = 0
+
         # Results
         self.cuts = []
         self.breaks = []
@@ -109,13 +168,45 @@ class CuttingCounter:
         self.smoothed_history.append(smoothed)
         return smoothed
 
-    def _get_derivative(self):
-        """Compute brightness change over deriv_window frames."""
-        if len(self.smoothed_history) < self.deriv_window:
-            return 0.0
-        current = self.smoothed_history[-1]
-        past = self.smoothed_history[-self.deriv_window]
-        return current - past
+    def _get_left_smoothed(self, raw):
+        """Smoothed brightness for left-table ROI."""
+        self.left_brightness_buffer.append(raw)
+        smoothed = float(np.mean(self.left_brightness_buffer))
+        self.left_smoothed_history.append(smoothed)
+        return smoothed
+
+    def _get_left_derivative(self):
+        """Derivative of left-table ROI brightness (d_short window)."""
+        if len(self.left_smoothed_history) >= self.deriv_window_short:
+            return self.left_smoothed_history[-1] - self.left_smoothed_history[-self.deriv_window_short]
+        return 0.0
+
+    def _get_derivatives(self):
+        """Compute brightness change at both derivative windows.
+
+        Returns (d_long, d_short) — the change over each window.
+        Either can trigger a cut detection if it exceeds its threshold.
+        """
+        current = self.smoothed_history[-1] if self.smoothed_history else 0
+        d_long = 0.0
+        d_short = 0.0
+        if len(self.smoothed_history) >= self.deriv_window_long:
+            d_long = current - self.smoothed_history[-self.deriv_window_long]
+        if len(self.smoothed_history) >= self.deriv_window_short:
+            d_short = current - self.smoothed_history[-self.deriv_window_short]
+        return d_long, d_short
+
+    def _check_threshold(self, d_long, d_short):
+        """Check if EITHER derivative window crosses its threshold.
+
+        Returns (passes, effective_deriv) where effective_deriv is the
+        best derivative value for confidence scoring.
+        """
+        long_pass = d_long >= self.deriv_threshold_long
+        short_pass = d_short >= self.deriv_threshold_short
+        # Use the stronger signal for peak tracking
+        effective = max(d_long, d_short)
+        return (long_pass or short_pass), effective
 
     def _compute_slide_motion(self, gray):
         """Frame-to-frame diff in slide ROI."""
@@ -167,12 +258,21 @@ class CuttingCounter:
         """Process one grayscale frame. Returns event dict or None."""
         tx1, ty1, tx2, ty2 = self.table_roi
 
-        # 1. Table brightness
-        raw_brightness = float(np.mean(gray[ty1:ty2, tx1:tx2]))
+        # 1. Table brightness (primary ROI)
+        table_region = gray[ty1:ty2, tx1:tx2]
+        raw_brightness = float(np.mean(table_region))
+        spatial_std = float(np.std(table_region))
         smoothed = self._get_smoothed(raw_brightness)
 
-        # 2. Derivative
-        deriv = self._get_derivative()
+        # 1b. Left-table brightness (secondary ROI for cross-validation)
+        lx1, ly1, lx2, ly2 = self.left_table_roi
+        left_brightness = float(np.mean(gray[ly1:ly2, lx1:lx2]))
+        left_smoothed = self._get_left_smoothed(left_brightness)
+        left_deriv = self._get_left_derivative()
+
+        # 2. Multi-scale derivatives
+        d_long, d_short = self._get_derivatives()
+        passes_threshold, effective_deriv = self._check_threshold(d_long, d_short)
 
         # 3. Slide motion
         slide_motion = self._compute_slide_motion(gray)
@@ -180,34 +280,63 @@ class CuttingCounter:
         # 4. Break detection
         self._update_break_state(smoothed, frame_idx)
 
-        # 5. Derivative spike detection (suppressed during breaks)
+        # 5. Multi-scale derivative spike detection (suppressed during breaks)
+        #    A cut is detected when EITHER derivative window crosses its threshold.
+        #    Adaptive confirmation: strong spikes need fewer frames to confirm.
         event = None
         if not self.in_break:
-            if deriv >= self.deriv_threshold:
+            if passes_threshold:
                 if not self.spike_detected:
-                    # New spike starting
+                    # New spike starting — track max deriv during confirmation
                     self.deriv_confirm_counter += 1
-                    if self.deriv_confirm_counter >= self.deriv_confirm:
+                    self.spike_peak_deriv_candidate = max(
+                        getattr(self, 'spike_peak_deriv_candidate', 0),
+                        effective_deriv)
+
+                    # Adaptive confirmation: strong spikes confirm faster
+                    is_strong = self.spike_peak_deriv_candidate >= self.deriv_strong_threshold
+                    needed = self.deriv_confirm_strong if is_strong else self.deriv_confirm
+
+                    if self.deriv_confirm_counter >= needed:
                         # Check min gap
                         if (frame_idx - self.last_cut_frame) >= self.min_cycle:
                             self.spike_detected = True
                             self.spike_start_frame = frame_idx
-                            self.spike_peak_deriv = deriv
+                            self.spike_peak_deriv = self.spike_peak_deriv_candidate
                             self.spike_peak_brightness = smoothed
                             self.slide_motion_peak = slide_motion
+                            self.spike_left_deriv_peak = left_deriv
+                            self.spike_spatial_std_at_peak = spatial_std
+                            self.spike_duration = 0
+                        else:
+                            # Too close to last cut — reset
+                            self.deriv_confirm_counter = 0
+                            self.spike_peak_deriv_candidate = 0
                 else:
-                    # Spike ongoing — track peak
-                    if deriv > self.spike_peak_deriv:
-                        self.spike_peak_deriv = deriv
+                    # Spike ongoing — track peak values
+                    self.spike_duration += 1
+                    if effective_deriv > self.spike_peak_deriv:
+                        self.spike_peak_deriv = effective_deriv
+                        self.spike_spatial_std_at_peak = spatial_std
                     if smoothed > self.spike_peak_brightness:
                         self.spike_peak_brightness = smoothed
                     self.slide_motion_peak = max(self.slide_motion_peak, slide_motion)
+                    self.spike_left_deriv_peak = max(self.spike_left_deriv_peak, left_deriv)
             else:
                 if self.spike_detected:
-                    # Spike ended — emit cut event
+                    # Spike ended — emit cut event with confidence score
                     self.spike_detected = False
                     self.last_cut_frame = self.spike_start_frame
                     t = self.spike_start_frame / self.fps
+
+                    # Brightness ceiling flag
+                    ceiling_flag = self.spike_peak_brightness > self.brightness_ceiling
+
+                    # Confidence scoring based on multi-signal strength
+                    confidence = self._compute_confidence(
+                        self.spike_peak_deriv, self.spike_duration,
+                        self.slide_motion_peak, self.spike_left_deriv_peak,
+                        self.spike_spatial_std_at_peak, ceiling_flag)
 
                     cut_event = {
                         "type": "cut",
@@ -216,6 +345,11 @@ class CuttingCounter:
                         "peak_deriv": round(self.spike_peak_deriv, 1),
                         "peak_brightness": round(self.spike_peak_brightness, 1),
                         "slide_motion_peak": round(self.slide_motion_peak, 1),
+                        "spike_duration": self.spike_duration,
+                        "left_deriv": round(self.spike_left_deriv_peak, 1),
+                        "spatial_std": round(self.spike_spatial_std_at_peak, 1),
+                        "ceiling_flag": ceiling_flag,
+                        "confidence": confidence,
                     }
                     self.cuts.append(cut_event)
                     event = cut_event
@@ -224,18 +358,26 @@ class CuttingCounter:
                         print(f"  >>> CUT #{len(self.cuts)} at {t:.1f}s "
                               f"(deriv={self.spike_peak_deriv:.1f}, "
                               f"bright={self.spike_peak_brightness:.1f}, "
-                              f"slide={self.slide_motion_peak:.1f})")
+                              f"slide={self.slide_motion_peak:.1f}, "
+                              f"left_d={self.spike_left_deriv_peak:.1f}, "
+                              f"std={self.spike_spatial_std_at_peak:.1f}, "
+                              f"dur={self.spike_duration}, conf={confidence})")
 
                     self.spike_start_frame = None
                     self.spike_peak_deriv = 0
                     self.spike_peak_brightness = 0
                     self.slide_motion_peak = 0
+                    self.spike_left_deriv_peak = 0
+                    self.spike_spatial_std_at_peak = 0
+                    self.spike_duration = 0
 
                 self.deriv_confirm_counter = 0
+                self.spike_peak_deriv_candidate = 0
         else:
             # Reset spike state during breaks
             self.spike_detected = False
             self.deriv_confirm_counter = 0
+            self.spike_peak_deriv_candidate = 0
 
         # 6. Store frame data (sampled)
         if frame_idx % self.sample_rate == 0:
@@ -244,7 +386,11 @@ class CuttingCounter:
                 "time_sec": round(frame_idx / self.fps, 2),
                 "brightness": round(raw_brightness, 1),
                 "smoothed": round(smoothed, 1),
-                "derivative": round(deriv, 1),
+                "derivative": round(d_long, 1),
+                "deriv_short": round(d_short, 1),
+                "left_brightness": round(left_brightness, 1),
+                "left_deriv": round(left_deriv, 1),
+                "spatial_std": round(spatial_std, 1),
                 "slide_motion": round(slide_motion, 1),
                 "in_break": self.in_break,
             })
@@ -253,7 +399,7 @@ class CuttingCounter:
         if self.debug and frame_idx % 25 == 0:
             t = frame_idx / self.fps
             state = "BREAK" if self.in_break else ("SPIKE" if self.spike_detected else "active")
-            print(f"  {t:7.1f}s | bright={smoothed:6.1f} | deriv={deriv:+6.1f} "
+            print(f"  {t:7.1f}s | bright={smoothed:6.1f} | dL={d_long:+6.1f} dS={d_short:+6.1f} "
                   f"| slide={slide_motion:5.1f} | {state}")
 
         return event
@@ -268,15 +414,24 @@ class CuttingCounter:
         self.fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        print(f"CH19 Cutting Counter v2 (derivative-based)")
+        print(f"CH19 Cutting Counter v5 (multi-scale + multi-ROI + close-pair merge)")
         print(f"  Video: {self.video_path}")
         print(f"  FPS: {self.fps:.1f}, Frames: {total_frames}, "
               f"Duration: {total_frames/self.fps:.1f}s ({total_frames/self.fps/60:.1f} min)")
         print(f"  Table ROI: {self.table_roi}")
-        print(f"  Deriv window: {self.deriv_window} frames, "
-              f"Threshold: {self.deriv_threshold}, Confirm: {self.deriv_confirm}")
+        print(f"  Deriv LONG:  {self.deriv_window_long} frames ({self.deriv_window_long/self.fps:.2f}s), "
+              f"threshold={self.deriv_threshold_long}")
+        print(f"  Deriv SHORT: {self.deriv_window_short} frames ({self.deriv_window_short/self.fps:.2f}s), "
+              f"threshold={self.deriv_threshold_short}")
+        print(f"  Strong spike: >{self.deriv_strong_threshold} (confirm {self.deriv_confirm_strong}f), "
+              f"normal confirm: {self.deriv_confirm}f")
         print(f"  Min gap: {self.min_cycle} frames ({self.min_cycle/self.fps:.1f}s)")
+        print(f"  Smoothing: {self.smooth_window} frames ({self.smooth_window/self.fps:.2f}s)")
         print(f"  Break: brightness>{self.break_brightness} for {self.break_hold} frames")
+        print(f"  Echo suppression: window={self.echo_window_sec}s, ratio={self.echo_ratio}")
+        print(f"  Close-pair merge: gap<={self.close_pair_gap}s, deriv>{self.close_pair_deriv}")
+        print(f"  Left-table ROI: {self.left_table_roi}")
+        print(f"  Brightness ceiling: {self.brightness_ceiling}")
         print()
 
         start_time = time.time()
@@ -315,7 +470,16 @@ class CuttingCounter:
                 "peak_deriv": round(self.spike_peak_deriv, 1),
                 "peak_brightness": round(self.spike_peak_brightness, 1),
                 "slide_motion_peak": round(self.slide_motion_peak, 1),
+                "spike_duration": 0,
+                "left_deriv": round(self.spike_left_deriv_peak, 1),
+                "spatial_std": round(self.spike_spatial_std_at_peak, 1),
+                "ceiling_flag": self.spike_peak_brightness > self.brightness_ceiling,
+                "confidence": "low",
             })
+
+        # Post-processing filters
+        self._suppress_echoes()
+        self._merge_close_pairs()
 
         # Summary stats
         total_cuts = len(self.cuts)
@@ -342,13 +506,21 @@ class CuttingCounter:
               f"({frame_idx/elapsed:.0f} fps, {frame_idx/elapsed/self.fps:.1f}x realtime)")
 
         # Print first/last 10 cuts
+        # Confidence distribution
         if total_cuts > 0:
+            high_conf = sum(1 for c in self.cuts if c.get("confidence") == "high")
+            med_conf = sum(1 for c in self.cuts if c.get("confidence") == "medium")
+            low_conf = sum(1 for c in self.cuts if c.get("confidence") == "low")
+            print(f"  Confidence:           {high_conf} high, {med_conf} medium, {low_conf} low")
+
             print(f"\n  First 10 cuts:")
             for i, cut in enumerate(self.cuts[:10]):
                 mins = int(cut['time_sec'] // 60)
                 secs = cut['time_sec'] % 60
+                conf = cut.get('confidence', '?')
                 print(f"    #{i+1:3d}: {mins:2d}:{secs:05.2f} "
-                      f"(deriv={cut['peak_deriv']:+.1f}, bright={cut['peak_brightness']:.0f})")
+                      f"(deriv={cut['peak_deriv']:+.1f}, bright={cut['peak_brightness']:.0f}, "
+                      f"conf={conf})")
             if total_cuts > 20:
                 print(f"  ... ({total_cuts - 20} more) ...")
                 print(f"  Last 10 cuts:")
@@ -356,8 +528,10 @@ class CuttingCounter:
                     idx = total_cuts - 10 + i
                     mins = int(cut['time_sec'] // 60)
                     secs = cut['time_sec'] % 60
+                    conf = cut.get('confidence', '?')
                     print(f"    #{idx+1:3d}: {mins:2d}:{secs:05.2f} "
-                          f"(deriv={cut['peak_deriv']:+.1f}, bright={cut['peak_brightness']:.0f})")
+                          f"(deriv={cut['peak_deriv']:+.1f}, bright={cut['peak_brightness']:.0f}, "
+                          f"conf={conf})")
 
         # Break periods
         if self.breaks:
@@ -385,14 +559,26 @@ class CuttingCounter:
                 "duration_sec": round(duration_sec, 2),
                 "total_frames": frame_idx,
                 "processing_time_sec": round(elapsed, 2),
-                "version": "v2-derivative",
+                "version": "v5-robust",
             },
             "config": {
                 "table_roi": list(self.table_roi),
+                "left_table_roi": list(self.left_table_roi),
                 "slide_roi": list(self.slide_roi),
-                "deriv_window": self.deriv_window,
-                "deriv_threshold": self.deriv_threshold,
+                "smooth_window": self.smooth_window,
+                "deriv_window_long": self.deriv_window_long,
+                "deriv_window_short": self.deriv_window_short,
+                "deriv_threshold_long": self.deriv_threshold_long,
+                "deriv_threshold_short": self.deriv_threshold_short,
+                "deriv_strong_threshold": self.deriv_strong_threshold,
+                "deriv_confirm": self.deriv_confirm,
+                "deriv_confirm_strong": self.deriv_confirm_strong,
                 "min_cycle_frames": self.min_cycle,
+                "echo_window_sec": self.echo_window_sec,
+                "echo_ratio": self.echo_ratio,
+                "close_pair_gap": self.close_pair_gap,
+                "close_pair_deriv": self.close_pair_deriv,
+                "brightness_ceiling": self.brightness_ceiling,
                 "break_brightness": self.break_brightness,
             },
             "summary": {
@@ -408,6 +594,151 @@ class CuttingCounter:
         }
 
         return results
+
+    def _suppress_echoes(self):
+        """Post-processing: remove echo detections that follow a stronger event.
+
+        An "echo" is a weaker detection within ECHO_WINDOW_SEC of a stronger
+        preceding detection. In the 4-worker phase, strong cuts create
+        derivative bounces that the sensitive short-window detector picks up.
+        Real consecutive cuts (2-worker phase) have similar strengths, so
+        they aren't suppressed.
+
+        Rule: Remove event[i] if there exists event[j] (j < i) where:
+          - time gap < echo_window_sec
+          - event[j].peak_deriv > event[i].peak_deriv
+          - event[i].peak_deriv < echo_ratio * event[j].peak_deriv
+        """
+        if not self.cuts or self.echo_ratio >= 1.0:
+            return
+
+        original_count = len(self.cuts)
+        filtered = []
+
+        for i, cut in enumerate(self.cuts):
+            is_echo = False
+            for j in range(i - 1, -1, -1):
+                prev = self.cuts[j]
+                gap = cut["time_sec"] - prev["time_sec"]
+                if gap > self.echo_window_sec:
+                    break
+                if (prev["peak_deriv"] > cut["peak_deriv"] and
+                        cut["peak_deriv"] < self.echo_ratio * prev["peak_deriv"]):
+                    is_echo = True
+                    break
+
+            if not is_echo:
+                filtered.append(cut)
+            elif self.debug:
+                t = cut["time_sec"]
+                print(f"  ~~~ ECHO suppressed at {int(t)//60}:{t%60:05.2f} "
+                      f"(deriv={cut['peak_deriv']:.1f}, prev={self.cuts[j]['peak_deriv']:.1f})")
+
+        suppressed = original_count - len(filtered)
+        if suppressed > 0:
+            print(f"  Echo suppression: removed {suppressed} echoes "
+                  f"(window={self.echo_window_sec}s, ratio={self.echo_ratio})")
+        self.cuts = filtered
+
+    def _compute_confidence(self, peak_deriv, spike_duration, slide_motion,
+                            left_deriv, spatial_std, ceiling_flag):
+        """Score cut confidence as high/medium/low based on multi-signal strength.
+
+        Criteria:
+          - peak_deriv >= 30 → strong signal indicator
+          - spike_duration >= 3 → sustained spike (not noise)
+          - slide_motion >= 5 → visible piece movement below table
+          - left_deriv > 0 → secondary ROI confirms brightness increase
+          - spatial_std < 100 → uniform brightness change (real table exposure)
+          - ceiling_flag → brightness too high, possible break transition
+        """
+        score = 0
+
+        # Primary signal strength
+        if peak_deriv >= 40:
+            score += 3
+        elif peak_deriv >= 30:
+            score += 2
+        elif peak_deriv >= 22:
+            score += 1
+
+        # Spike duration
+        if spike_duration >= 5:
+            score += 2
+        elif spike_duration >= 3:
+            score += 1
+
+        # Slide motion (piece falling off table)
+        if slide_motion >= 8:
+            score += 1
+        elif slide_motion >= 5:
+            score += 0.5
+
+        # Left-ROI cross-validation (real cuts affect whole table)
+        if left_deriv > 5:
+            score += 1
+        elif left_deriv > 0:
+            score += 0.5
+
+        # Spatial uniformity (real table exposure is uniform)
+        if spatial_std < 90:
+            score += 0.5
+
+        # Brightness ceiling penalty
+        if ceiling_flag:
+            score -= 1
+
+        if score >= 4:
+            return "high"
+        elif score >= 2:
+            return "medium"
+        else:
+            return "low"
+
+    def _merge_close_pairs(self):
+        """Post-processing: merge double-detections of the same physical event.
+
+        When two consecutive detections fire within CLOSE_PAIR_GAP seconds and
+        at least one has peak_deriv above CLOSE_PAIR_DERIV, they are from the
+        same physical cut event — keep only the stronger detection.
+
+        2-worker consecutive cuts pass through unaffected because BOTH events
+        have weak deriv (<25), well below CLOSE_PAIR_DERIV (30). This is the
+        key distinguishing feature: 4-worker double-detections always involve
+        at least one strong spike, while 2-worker consecutive cuts are uniformly
+        weak but genuine.
+        """
+        if not self.cuts or self.close_pair_gap <= 0:
+            return
+
+        original_count = len(self.cuts)
+        result = [self.cuts[0]]
+
+        for i in range(1, len(self.cuts)):
+            gap = self.cuts[i]["time_sec"] - result[-1]["time_sec"]
+            if gap <= self.close_pair_gap:
+                max_d = max(result[-1]["peak_deriv"], self.cuts[i]["peak_deriv"])
+                if max_d > self.close_pair_deriv:
+                    # Same physical event — keep the stronger detection
+                    if self.cuts[i]["peak_deriv"] > result[-1]["peak_deriv"]:
+                        if self.debug:
+                            t1 = result[-1]["time_sec"]
+                            t2 = self.cuts[i]["time_sec"]
+                            print(f"  ~~~ MERGE: replacing {t1:.1f}s (d={result[-1]['peak_deriv']:.1f}) "
+                                  f"with {t2:.1f}s (d={self.cuts[i]['peak_deriv']:.1f})")
+                        result[-1] = self.cuts[i]
+                    elif self.debug:
+                        t2 = self.cuts[i]["time_sec"]
+                        print(f"  ~~~ MERGE: dropping {t2:.1f}s (d={self.cuts[i]['peak_deriv']:.1f}), "
+                              f"keeping {result[-1]['time_sec']:.1f}s (d={result[-1]['peak_deriv']:.1f})")
+                    continue  # skip adding this event
+            result.append(self.cuts[i])
+
+        merged = original_count - len(result)
+        if merged > 0:
+            print(f"  Close-pair merge: removed {merged} double-detections "
+                  f"(gap<={self.close_pair_gap}s, deriv>{self.close_pair_deriv})")
+        self.cuts = result
 
     def _compute_break_time(self):
         """Sum up break durations from break events."""
@@ -431,28 +762,28 @@ class CuttingCounter:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="CH19 Cutting Counter v2")
+    parser = argparse.ArgumentParser(description="CH19 Cutting Counter v5")
     parser.add_argument("video", help="Path to video file or RTSP URL")
     parser.add_argument("--output", "-o", help="Output JSON path")
     parser.add_argument("--debug", "-d", action="store_true", help="Verbose debug output")
 
     # Config overrides
-    parser.add_argument("--deriv-threshold", type=float, default=DERIV_THRESHOLD,
-                        help="Derivative threshold for cut detection (default: 20)")
-    parser.add_argument("--deriv-window", type=int, default=DERIV_WINDOW,
-                        help="Frames for derivative computation (default: 50)")
+    parser.add_argument("--threshold-long", type=float, default=DERIV_THRESHOLD_LONG,
+                        help=f"Long-window derivative threshold (default: {DERIV_THRESHOLD_LONG})")
+    parser.add_argument("--threshold-short", type=float, default=DERIV_THRESHOLD_SHORT,
+                        help=f"Short-window derivative threshold (default: {DERIV_THRESHOLD_SHORT})")
     parser.add_argument("--smooth", type=int, default=SMOOTH_WINDOW,
-                        help="Smoothing window frames (default: 10)")
+                        help=f"Smoothing window frames (default: {SMOOTH_WINDOW})")
     parser.add_argument("--min-gap", type=int, default=MIN_CYCLE_FRAMES,
-                        help="Minimum frames between cuts (default: 75)")
+                        help=f"Minimum frames between cuts (default: {MIN_CYCLE_FRAMES})")
 
     args = parser.parse_args()
 
     counter = CuttingCounter(
         args.video,
         debug=args.debug,
-        deriv_threshold=args.deriv_threshold,
-        deriv_window=args.deriv_window,
+        deriv_threshold_long=args.threshold_long,
+        deriv_threshold_short=args.threshold_short,
         smooth_window=args.smooth,
         min_cycle=args.min_gap,
     )

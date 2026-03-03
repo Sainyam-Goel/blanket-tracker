@@ -5,7 +5,7 @@ import json
 import sys
 from datetime import datetime
 
-CH19_JSON = "cutting_full_v2.json"
+CH19_JSON = "cutting_full_v5.json"
 CH21_JSON = "blanket_count_1hr_v4.json"
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 

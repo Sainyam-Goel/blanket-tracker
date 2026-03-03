@@ -308,7 +308,7 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 ## CH19 Cutting Counter
 
 ### Process
-4 workers at white cutting table (2 in back cut, 2 in front slide pieces off). Blanket spread across table → cut → piece slides down front → repeat. After 29:37 mark, only 2 workers.
+4 workers at white cutting table (2 in back cut, 2 in front slide pieces off). Blanket spread across table → cut → piece slides down front → repeat. After 29:37 mark, only 2 workers using scissors (rapid 2-3s cycles, weaker signals). Workers always extend hands for full cut. In 4-worker setup, the workers farther from camera make the cuts.
 
 ### Video
 - Full: `/Users/sai/Downloads/Full cut vido.mp4` (59.9 min, 25fps, 1920x1080, 898MB)
@@ -334,47 +334,80 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 | 42:40 | Last cut (cloth doesn't fall completely) |
 | 42:40+ | No cutting |
 
+### Ground Truth (validated timestamps)
+- **4-worker GT** (first 3:06, 32 cuts): seconds [21,24,29,34,45,49,54,58,63,67,73,78,82,86,94,98,102,107,110,122,127,131,135,140,145,148,152,157,161,166,172,177] + discards [117, 186]
+- **2-worker GT** (30:27-31:17, 14 cuts): seconds [1835,1845,1847,1850,1852,1855,1858,1861,1864,1867,1869,1872,1875,1877] + discards [1827, 1840]
+
 ### Detection: v1 (absolute brightness thresholds) — FAILED
 - TABLE_ROI (820,240,1020,360) mean brightness: covered=80-86, exposed=150-182 in short clip
 - ON=120, OFF=100 with hysteresis state machine
 - **Problem**: "Covered" baseline varies 77-155 depending on blanket color. ON=120 triggered 76.5% of full video. Completely unusable.
 
-### Detection: v2 (brightness derivative) — CURRENT
-**Method**: Detect positive derivative spikes in smoothed table brightness.
+### Detection: v5 (multi-scale + multi-ROI + close-pair merge) — CURRENT
+**Method**: Multi-scale brightness derivative spike detection with robust post-processing.
 - When a piece slides off → white table exposed → brightness INCREASES rapidly
-- Compute derivative: current smoothed brightness − smoothed brightness 2s ago
-- Spike above threshold 20 = cut detected
+- TWO derivative windows: d_long (35 frames/1.4s, threshold 18) + d_short (25 frames/1.0s, threshold 10)
+- EITHER window crossing triggers detection
 - Color-agnostic: detects CHANGE, not absolute level
+
+**Post-processing guardrails (v5):**
+1. **Echo suppression**: Weak detections (<60% of preceding event within 3s) removed
+2. **Close-pair merge**: Events within 2.5s where at least one has deriv >30 are merged (same physical event). 2-worker consecutive cuts (deriv <25) pass through.
+3. **Multi-ROI**: Left-table ROI (600,240,820,360) tracked for cross-validation metadata
+4. **Brightness ceiling**: Peak brightness >230 flagged as possible break transition
+5. **Enhanced confidence**: Uses peak_deriv + spike_duration + slide_motion + left_deriv + spatial_std + ceiling_flag
 
 **Signal analysis across full video:**
 | Phase | Brightness baseline | Typical derivative | Detection quality |
 |-------|--------------------|--------------------|-------------------|
 | 4 workers, dark fabric (0:19-3:07) | ~77 | +35 to +120 | Excellent |
 | 4 workers, lighter fabrics (4:01-29:37) | 90-155 (varies) | +20 to +100 | Good |
-| 2 workers (29:37-33:49) | 125-157 | +15 to +28 | Moderate (some misses) |
+| 2 workers scissors (29:37-33:49) | 125-157 | +10 to +23 (d25) | Good (v5 multi-scale catches these) |
 | Small pieces (39:22-42:48) | variable | wild oscillations | Noisy |
 | Empty table / breaks | ~248 | ~0 | Suppressed correctly |
 
 **Break periods detected (brightness > 235 for > 3s):**
 - 3:08-3:45, 10:47-11:29, 20:34-20:49, 25:52-26:33, 29:36-29:58, 33:49-34:25, 39:21-39:40, 42:49-end
 
-**Results (v2, full video):**
-- 333 cuts detected
+**Results (v5, full video):**
+- 450 cuts detected (553 raw → 43 echoes → 60 close-pair merges → 450)
 - Active time: ~56 min, Break time: ~3.8 min
-- Rate: 5.9 cuts/min (averaged over all phases)
-- Processing: 497 fps (19.9x realtime)
+- Rate: 8.0 cuts/min (active time)
+- Avg cycle: 5.7s
+- Confidence: 332 high, 96 medium, 22 low
+- Processing: 364 fps (14.6x realtime)
+
+### Version History (CH19)
+| Version | Approach | Cuts | 4w Recall | 4w FP | 2w Recall | 2w FP |
+|---------|----------|------|-----------|-------|-----------|-------|
+| v1 | Absolute brightness | N/A | Failed | N/A | Failed | N/A |
+| v2 | Single derivative (d50≥20) | 333 | ~97% | ~1 | ~50% | ? |
+| v3 | Tuned (d35≥18, adaptive) | 379 | 100% | ~1 | ~50% | ? |
+| v4 | Multi-scale (d35+d25, echo) | 510 | 100% | 11 | 100% | 2 |
+| v5 | v4 + close-pair merge + multi-ROI | 450 | 100% | **0** ★ | 100% | 2 |
+
+### Key Technical Insights (CH19)
+1. **Why d25 > d20**: 2-worker oscillation ~3s period. d25 (1s window) captures more rising phase than d20 (0.8s).
+2. **Echo vs real consecutive cuts**: Real 2-worker cuts have similar deriv (~10-15 each). 4-worker echoes much weaker than preceding cut. Ratio 0.6 exploits this.
+3. **Close-pair merge key insight**: 4-worker double-detections always have deriv >30. 2-worker consecutive cuts always have deriv <25. Deriv-gated merging works perfectly.
+4. **Trough gate failed**: Requiring brightness dip between detections didn't work — echoes DO have sufficient dips.
+5. **Multi-ROI analysis**: FPs have elevated brightness (table already exposed), negative left-ROI derivative, and higher spatial std vs TPs.
 
 ### ROI Analysis (from frame extraction)
 - 13 frames extracted from cutting clip to `frames/ch19/`
 - Table surface clearly white; right side (820-1020, 240-360) shows best signal
 - Slide zone (720-960, 370-520) shows motion spikes during cuts but unreliable in 2-worker phase
 - Frame-diff grid analysis confirmed motion hotspot at (720,180)-(960,360) during all cut events
+- Left-table ROI (600-820, 240-360) provides cross-validation: real cuts show positive left_deriv, FPs show negative
 
 ### CH19 Files
 | File | Purpose |
 |------|---------|
-| `cutting_counter.py` | CH19 counter v2 (derivative-based, ~300 lines) |
-| `cutting_full_v2.json` | Full video results (333 cuts, events + frame_data) |
+| `cutting_counter.py` | CH19 counter v5 (multi-scale + multi-ROI, ~700 lines) |
+| `cutting_full_v5.json` | Full video results (450 cuts) — CURRENT |
+| `cutting_full_v4.json` | v4 results (510 cuts) |
+| `cutting_full_v3.json` | v3 results (379 cuts) |
+| `cutting_full_v2.json` | v2 results (333 cuts) |
 | `cutting_test.json` | Short clip results (2 cuts) |
 | `frames/ch19/` | 13 extracted frames for ROI analysis |
 
@@ -383,7 +416,7 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 ## Dashboard v3.0 — Dual Camera (CH19 + CH21)
 
 ### Overview
-- **File**: `blanket_tracker_dashboard.html` (~550KB, self-contained)
+- **File**: `blanket_tracker_dashboard.html` (~677KB, self-contained)
 - **Generator**: `generate_dashboard.py` — reads both JSON data files, compacts, generates HTML
 - **Regenerate**: `python3 generate_dashboard.py`
 - **Rendering**: Native Canvas API charts, no external JS libraries
@@ -391,11 +424,11 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ### Data Embedding
 The generator script (`generate_dashboard.py`) does the following:
-1. Reads `cutting_full_v2.json` (CH19, 743KB) and `blanket_count_1hr_v4.json` (CH21, 22MB)
-2. Compacts CH19 `frame_data` by taking every 4th entry (3595 → 899 samples)
+1. Reads `cutting_full_v5.json` (CH19) and `blanket_count_1hr_v4.json` (CH21, 22MB)
+2. Compacts CH19 `frame_data` by taking every 4th entry (→ 899 samples)
 3. Compacts CH21 `frames` by taking every 100th entry (89817 → 899 samples)
 4. Embeds as single `DASHBOARD_DATA` JS object with `ch19` and `ch21` sub-objects
-5. Total embedded data: ~510KB
+5. Total embedded data: ~637KB
 
 **Embedded data structure:**
 ```javascript
@@ -403,11 +436,11 @@ const D = {
   generated_at: "...",
   ch19: {
     metadata: { video, fps, duration_sec, total_frames },
-    config: { table_roi, deriv_threshold, ... },
-    summary: { total_cuts, active_time_sec, break_time_sec, cuts_per_minute, avg_cycle_sec },
-    events: [ /* 333 cut events */ ],
+    config: { table_roi, left_table_roi, deriv_threshold_long/short, close_pair_gap, ... },
+    summary: { total_cuts: 450, active_time_sec, break_time_sec, cuts_per_minute: 8.0, avg_cycle_sec: 5.7 },
+    events: [ /* 450 cut events with left_deriv, spatial_std, ceiling_flag, confidence */ ],
     breaks: [ /* 19 break start/end pairs */ ],
-    frame_data: [ /* ~899 sampled entries with brightness, derivative, slide_motion */ ]
+    frame_data: [ /* ~899 sampled entries with brightness, derivative, deriv_short, left_brightness, left_deriv, spatial_std, slide_motion */ ]
   },
   ch21: {
     video_info: { width, height, fps, total_frames, duration_sec },
@@ -470,8 +503,8 @@ Header (title + CH19/CH21 duration badges)
 | File | Purpose |
 |------|---------|
 | `generate_dashboard.py` | Generator script — reads JSON, compacts, writes HTML |
-| `blanket_tracker_dashboard.html` | Generated output (~550KB, self-contained) |
-| `cutting_full_v2.json` | CH19 source data (333 cuts, 743KB) |
+| `blanket_tracker_dashboard.html` | Generated output (~677KB, self-contained) |
+| `cutting_full_v5.json` | CH19 source data (450 cuts) — CURRENT |
 | `blanket_count_1hr_v4.json` | CH21 source data (223 acc + 103 rej, 22MB) |
 
 ---
@@ -497,3 +530,11 @@ Header (title + CH19/CH21 duration badges)
 9. **Diagnostic at GT timestamps ≠ actual detection signals**: Texture slope measured at GT timestamps (frame-seeking) showed clear separation (1.24). But the same feature computed during live table cycle tracking was much weaker due to smoothing, cycle dynamics, and overlap. Always validate features in the actual processing pipeline.
 
 10. **Worker body motion is the #1 noise source**: All ROIs near the workspace are dominated by worker movement. Any motion-based feature must account for this.
+
+11. **Multi-scale derivative detection**: Different working phases (4-worker vs 2-worker scissors) produce fundamentally different signal characteristics. A single derivative window can't handle both. Running two windows in parallel (d35 for strong/slow + d25 for weak/fast) achieves 100% recall across both phases.
+
+12. **Close-pair merge > echo suppression for double-detections**: Echo suppression (remove if deriv < ratio × preceding) only catches WEAKER echoes. Many double-detections in 4-worker phase are equally strong or the echo is even stronger than the initial detection. The key insight: in 2-worker mode both events have weak deriv (<25), while 4-worker double-detections always involve at least one strong event (>30). Deriv-gated merging exploits this perfectly.
+
+13. **Cross-ROI validation provides confidence, not gating**: A second ROI (left table) shows that real cuts have positive left_deriv (whole table brightens) while FPs have negative left_deriv (returning to baseline). However, this is more useful as metadata for confidence scoring than as a hard gate, because the overlap between distributions is too large.
+
+14. **Parameter sweeps on pre-extracted signals are 100x faster**: Extracting signal data from a video region once, then simulating detector configurations in Python, allows testing ~45 configs in seconds vs minutes per full video run. Essential for systematic tuning.
