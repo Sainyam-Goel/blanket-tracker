@@ -1,27 +1,63 @@
-# Blanket Tracker
+# Blanket Production Tracker
 
-A computer vision system for counting blankets on a factory production floor using OpenCV.
+Computer vision system for counting blankets on a factory production floor using OpenCV. Tracks both **cutting** (CH19) and **finishing/weighing** (CH21) stations from NVR security camera feeds.
 
 ## Overview
 
-Blanket Tracker uses OpenCV's MOG2 background subtraction algorithm to detect and count blanket processing events across defined zones in factory camera feeds. It supports both live RTSP streams from an NVR and pre-recorded video files, and outputs a JSON log of all detected events.
+Built for a blanket factory in Panipat, Haryana. The system processes 1920x1080 @ 25fps NVR recordings and produces a self-contained HTML dashboard with production analytics.
 
-The companion dashboard (`blanket_tracker_dashboard.html`) visualizes the results with per-zone counts, motion timelines, and a full event log.
+### Two-Camera Pipeline
+
+| Camera | Station | What It Counts | Method |
+|--------|---------|----------------|--------|
+| **CH19** | Cutting Table | Blanket cuts (pieces sliding off table) | Multi-scale brightness derivative detection |
+| **CH21** | Finishing Station | Accepted + rejected blankets | Scale reference-frame comparison + table texture |
+
+## Results (1hr test video)
+
+| Metric | Value |
+|--------|-------|
+| **CH19 cuts detected** | 450 (v5) |
+| **CH21 accepted blankets** | 223 |
+| **CH21 rejected blankets** | 103 |
+| **CH19 4-worker recall** | 32/32 = 100% |
+| **CH19 2-worker recall** | 14/14 = 100% |
+| **CH19 false positives** | 0 |
+| **CH21 accepted recall** | 66/72 = 92% |
+| **Processing speed** | ~15x real-time |
 
 ## How It Works
 
-1. Each camera feed is divided into named zones (e.g. Cutting Table, Weighing Station)
-2. Each frame is processed through MOG2 background subtraction + morphological filtering to isolate motion
-3. When motion in a zone crosses a configurable activity threshold, a counting event is recorded
-4. A cooldown period prevents duplicate counts from sustained motion
-5. Results are saved to a JSON log file at the end of the session
+### CH19 — Cutting Counter (v5)
+
+Detects when cut blanket pieces slide off the white table, exposing the surface:
+
+1. **Multi-scale derivative detection**: Two derivative windows (d35 for strong 4-worker cuts, d25 for rapid 2-worker scissor cuts) run in parallel
+2. **Echo suppression**: Removes weak "bounce" detections following strong events
+3. **Close-pair merge**: When two detections fire within 2.5s and at least one is strong (deriv >30), they're the same physical event — keeps only the stronger one. Consecutive 2-worker cuts (weak deriv <25) pass through unaffected
+4. **Multi-ROI cross-validation**: Left-table ROI provides secondary signal for confidence scoring
+5. **Break detection**: Suppresses counting when table is empty (brightness >235)
+
+### CH21 — Finishing Counter (v4)
+
+Tracks blankets through the weighing scale chokepoint:
+
+1. **Scale detection**: Reference-frame comparison with hysteresis (ON=25, OFF=15 dead zone)
+2. **Table texture**: Grayscale std deviation tracks blanket presence on folding table
+3. **Accept/reject classification**: Scale events = accepted. Table events without nearby scale event = rejected
+4. **Drift recovery**: Auto-recalibrates when stuck "loaded" >10s (handles physical scale movement)
+5. **Lighting change detection**: Pauses counting during sudden brightness jumps, recalibrates on recovery
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `blanket_tracker.py` | Main tracking script — runs on video files or live RTSP streams |
-| `blanket_tracker_dashboard.html` | Interactive dashboard to visualize analysis results |
+| `cutting_counter.py` | CH19 cutting counter v5 (~700 lines) |
+| `blanket_counter.py` | CH21 finishing counter v4 (~830 lines) |
+| `generate_dashboard.py` | Reads both JSON outputs, generates dashboard HTML |
+| `blanket_tracker_dashboard.html` | Self-contained dual-camera dashboard (~677KB) |
+| `compare_ground_truth.py` | CH21 ground truth comparison tool |
+| `PROJECT_NOTES.md` | Comprehensive technical notes, all timestamps, insights |
 
 ## Requirements
 
@@ -29,59 +65,65 @@ The companion dashboard (`blanket_tracker_dashboard.html`) visualizes the result
 pip install opencv-python numpy
 ```
 
-Optional (for future YOLOv8 upgrade):
-```bash
-pip install ultralytics supervision
-```
-
 ## Usage
 
-**Analyze a video file:**
+**Count cuts from CH19 video:**
 ```bash
-python blanket_tracker.py --source path/to/video.mp4 --camera ch21
+python3 cutting_counter.py /path/to/ch19_video.mp4 --output cutting_results.json
 ```
 
-**Connect to a live RTSP stream:**
+**Count blankets from CH21 video:**
 ```bash
-python blanket_tracker.py --source rtsp://user:pass@192.168.1.100/ch21 --camera ch21 --live
+python3 blanket_counter.py /path/to/ch21_video.mp4 --output blanket_results.json
 ```
 
-**Run both cameras simultaneously:**
+**Generate dashboard:**
 ```bash
-python blanket_tracker.py --source rtsp://user:pass@NVR_IP/ch19 --camera ch19 --live &
-python blanket_tracker.py --source rtsp://user:pass@NVR_IP/ch21 --camera ch21 --live &
+python3 generate_dashboard.py
+```
+This reads `cutting_full_v5.json` and `blanket_count_1hr_v4.json`, then generates `blanket_tracker_dashboard.html`. Open in any browser.
+
+**Compare against ground truth (CH21):**
+```bash
+python3 compare_ground_truth.py blanket_count_1hr_v4.json
 ```
 
-## Camera Configuration
+## Dashboard
 
-Two cameras are pre-configured with zone layouts:
+The dashboard is a single self-contained HTML file with embedded data — no server needed. Features:
 
-- **CH19** — Cutting Floor: Cutting Table, Left Sorting Worker, Right Pile Area
-- **CH21** — Finishing Station: Weighing Station, Folding Table, Sewing Machines
+- **KPI cards**: Cuts, accepted, rejected, rates for both cameras
+- **Combined production timeline**: Dual-axis step chart showing both cameras over time
+- **Signal charts**: Raw brightness derivative (CH19) and scale/table signals (CH21)
+- **Production breakdown**: 5-minute interval grouped bar chart
+- **Session summary**: Key stats per camera
 
-Zone rectangles (pixel coordinates) can be tuned in `ZONE_CONFIG` inside `blanket_tracker.py` to match your specific camera angles.
+Dark theme, Canvas API rendering, retina-aware. No external dependencies.
 
-## Output
+## Architecture
 
-Each session produces a `counts.json` file:
-
-```json
-{
-  "camera": "ch21",
-  "total": 7,
-  "blankets_counted": {
-    "Weighing Station": 3,
-    "Folding Table": 1,
-    "Sewing Machines": 3
-  },
-  "events": [ ... ]
-}
+```
+NVR Camera Feed (1920x1080 @ 25fps)
+    │
+    ├── CH19: cutting_counter.py
+    │   ├── Table ROI (820,240,1020,360) → brightness derivative
+    │   ├── Left-table ROI (600,240,820,360) → cross-validation
+    │   ├── Slide ROI (720,370,960,520) → motion metadata
+    │   └── Output: cutting_full_v5.json (450 cuts)
+    │
+    ├── CH21: blanket_counter.py
+    │   ├── Scale ROI (1440,440,1520,500) → reference-frame diff
+    │   ├── Table ROI (980,340,1240,450) → texture std
+    │   └── Output: blanket_count_1hr_v4.json (326 blankets)
+    │
+    └── generate_dashboard.py
+        └── blanket_tracker_dashboard.html (self-contained)
 ```
 
-Open `blanket_tracker_dashboard.html` in a browser to visualize the results.
+## Key Learnings
 
-## Accuracy Notes
-
-- Background subtraction works best for indoor factory scenes with stable lighting
-- The **Weighing Station** on CH21 is the recommended chokepoint — every finished blanket passes through it
-- For higher accuracy, consider training a YOLOv8 model on labeled frames of folded blankets using [Roboflow](https://roboflow.com)
+- **Derivative detection beats absolute thresholds**: Blanket color varies wildly (baseline 77-155), but the brightness *change* when a piece slides off is consistent
+- **Hysteresis prevents chattering**: Dead zone between ON/OFF thresholds eliminates state oscillation
+- **Physics-based filters work**: Min duration and min gap derived from actual worker pace
+- **Multi-scale catches different work phases**: 4-worker and 2-worker cutting produce fundamentally different signals
+- **Close-pair merge > echo suppression**: Double-detections aren't always weaker — they can be equally strong or stronger than the initial detection
