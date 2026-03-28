@@ -1,6 +1,8 @@
 # Blanket Production Tracker
 
-Computer vision system for counting blankets on a factory production floor using OpenCV. Tracks both **cutting** (CH19) and **finishing/weighing** (CH21) stations from NVR security camera feeds.
+Computer vision system for counting blankets on a factory production floor using OpenCV. Tracks both **cutting** (CH19) and **passing/weighing** (CH21) stations from NVR security camera feeds.
+
+**Live dashboard**: [sainyam-goel.github.io/blanket-tracker](https://sainyam-goel.github.io/blanket-tracker/)
 
 ## Overview
 
@@ -11,20 +13,30 @@ Built for a blanket factory in Panipat, Haryana. The system processes 1920x1080 
 | Camera | Station | What It Counts | Method |
 |--------|---------|----------------|--------|
 | **CH19** | Cutting Table | Blanket cuts (pieces sliding off table) | Multi-scale brightness derivative detection |
-| **CH21** | Finishing Station | Accepted + rejected blankets | Scale reference-frame comparison + table texture |
+| **CH21** | Passing Station | Accepted + rejected blankets | Scale reference-frame comparison + table texture |
 
-## Results (1hr test video)
+## Results
+
+### Full Day (7.6 hrs, 27 Feb 2026, 11:00–18:35)
 
 | Metric | Value |
 |--------|-------|
-| **CH19 cuts detected** | 450 (v5) |
-| **CH21 accepted blankets** | 223 |
-| **CH21 rejected blankets** | 103 |
+| **CH19 cuts detected** | 1,726 |
+| **CH21 accepted blankets** | 1,488 |
+| **CH21 rejected blankets** | 431 |
+| **CH21 reject rate** | 22.5% |
+| **CH19 active cutting rate** | 4.6 cuts/min |
+| **CH21 finish rate** | 253 blankets/hr |
+| **Processing speed** | ~10x real-time per camera |
+
+### Accuracy (validated on 1hr ground truth)
+
+| Metric | Value |
+|--------|-------|
 | **CH19 4-worker recall** | 32/32 = 100% |
 | **CH19 2-worker recall** | 14/14 = 100% |
 | **CH19 false positives** | 0 |
 | **CH21 accepted recall** | 66/72 = 92% |
-| **Processing speed** | ~15x real-time |
 
 ## How It Works
 
@@ -38,7 +50,7 @@ Detects when cut blanket pieces slide off the white table, exposing the surface:
 4. **Multi-ROI cross-validation**: Left-table ROI provides secondary signal for confidence scoring
 5. **Break detection**: Suppresses counting when table is empty (brightness >235)
 
-### CH21 — Finishing Counter (v4)
+### CH21 — Passing Counter (v4)
 
 Tracks blankets through the weighing scale chokepoint:
 
@@ -53,9 +65,11 @@ Tracks blankets through the weighing scale chokepoint:
 | File | Description |
 |------|-------------|
 | `cutting_counter.py` | CH19 cutting counter v5 (~700 lines) |
-| `blanket_counter.py` | CH21 finishing counter v4 (~830 lines) |
+| `blanket_counter.py` | CH21 passing counter v4 (~830 lines) |
 | `generate_dashboard.py` | Reads both JSON outputs, generates dashboard HTML |
-| `blanket_tracker_dashboard.html` | Self-contained dual-camera dashboard (~677KB) |
+| `run_full_day.py` | Batch processor for multi-segment NVR recordings |
+| `blanket_tracker_dashboard.html` | Self-contained dual-camera dashboard (~2.5MB) |
+| `index.html` | GitHub Pages entry point (copy of dashboard) |
 | `compare_ground_truth.py` | CH21 ground truth comparison tool |
 | `PROJECT_NOTES.md` | Comprehensive technical notes, all timestamps, insights |
 
@@ -77,11 +91,19 @@ python3 cutting_counter.py /path/to/ch19_video.mp4 --output cutting_results.json
 python3 blanket_counter.py /path/to/ch21_video.mp4 --output blanket_results.json
 ```
 
+**Process full day of NVR recordings (both cameras in parallel):**
+```bash
+python3 run_full_day.py                  # Both cameras
+python3 run_full_day.py --ch19-only      # Cutting only
+python3 run_full_day.py --ch21-only      # Passing only
+```
+Place NVR files in `frames/New Long video data/Cutting/` and `frames/New Long video data/Passing/`.
+
 **Generate dashboard:**
 ```bash
 python3 generate_dashboard.py
 ```
-This reads `cutting_full_v5.json` and `blanket_count_1hr_v4.json`, then generates `blanket_tracker_dashboard.html`. Open in any browser.
+This reads `cutting_fullday.json` and `blanket_fullday.json`, then generates `blanket_tracker_dashboard.html`. Open in any browser.
 
 **Compare against ground truth (CH21):**
 ```bash
@@ -93,12 +115,13 @@ python3 compare_ground_truth.py blanket_count_1hr_v4.json
 The dashboard is a single self-contained HTML file with embedded data — no server needed. Features:
 
 - **KPI cards**: Cuts, accepted, rejected, rates for both cameras
+- **Hourly breakdown table**: Per-hour stats with visual bars and confidence distribution
 - **Combined production timeline**: Dual-axis step chart showing both cameras over time
 - **Signal charts**: Raw brightness derivative (CH19) and scale/table signals (CH21)
-- **Production breakdown**: 5-minute interval grouped bar chart
+- **Production breakdown**: Adaptive interval (30-min for full day) grouped bar chart
 - **Session summary**: Key stats per camera
 
-Dark theme, Canvas API rendering, retina-aware. No external dependencies.
+Dark theme, Canvas API rendering, retina-aware. No external dependencies. Hosted on GitHub Pages.
 
 ## Architecture
 
@@ -109,15 +132,17 @@ NVR Camera Feed (1920x1080 @ 25fps)
     │   ├── Table ROI (820,240,1020,360) → brightness derivative
     │   ├── Left-table ROI (600,240,820,360) → cross-validation
     │   ├── Slide ROI (720,370,960,520) → motion metadata
-    │   └── Output: cutting_full_v5.json (450 cuts)
+    │   └── Output: cutting_fullday.json (1,726 cuts)
     │
     ├── CH21: blanket_counter.py
     │   ├── Scale ROI (1440,440,1520,500) → reference-frame diff
     │   ├── Table ROI (980,340,1240,450) → texture std
-    │   └── Output: blanket_count_1hr_v4.json (326 blankets)
+    │   └── Output: blanket_fullday.json (1,919 blankets)
+    │
+    ├── run_full_day.py (batch multi-segment processor)
     │
     └── generate_dashboard.py
-        └── blanket_tracker_dashboard.html (self-contained)
+        └── blanket_tracker_dashboard.html → index.html (GitHub Pages)
 ```
 
 ## Key Learnings

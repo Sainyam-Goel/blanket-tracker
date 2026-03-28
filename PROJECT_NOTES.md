@@ -369,13 +369,25 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 **Break periods detected (brightness > 235 for > 3s):**
 - 3:08-3:45, 10:47-11:29, 20:34-20:49, 25:52-26:33, 29:36-29:58, 33:49-34:25, 39:21-39:40, 42:49-end
 
-**Results (v5, full video):**
+**Results (v5, 1hr video):**
 - 450 cuts detected (553 raw → 43 echoes → 60 close-pair merges → 450)
 - Active time: ~56 min, Break time: ~3.8 min
 - Rate: 8.0 cuts/min (active time)
 - Avg cycle: 5.7s
 - Confidence: 332 high, 96 medium, 22 low
 - Processing: 364 fps (14.6x realtime)
+
+**Results (v5, full day 7.6hrs — 10 NVR segments, 27 Feb 2026, 11:00-18:35):**
+- 1,726 cuts detected across 7.6 hours
+- Active time: 6.3 hrs, Break time: 78.1 min (108 break periods)
+- Rate: 4.6 cuts/min (active time average)
+- Avg cycle: 15.7s (includes inter-break gaps)
+- Confidence: 1,267 high, 374 medium, 85 low
+- Processing: 288 fps (~10x realtime), ~40 min total
+- Sanity check: first hour = 451 cuts (vs 450 in 1hr run) — validated
+- Peak hour: 17:00 (507 cuts, 8.6/min, 82.6% high confidence)
+- Lunch break: 12:00-14:00 (7 cuts total)
+- Signal quality improves later in day (avg deriv 44→48)
 
 ### Version History (CH19)
 | Version | Approach | Cuts | 4w Recall | 4w FP | 2w Recall | 2w FP |
@@ -404,19 +416,21 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 | File | Purpose |
 |------|---------|
 | `cutting_counter.py` | CH19 counter v5 (multi-scale + multi-ROI, ~700 lines) |
-| `cutting_full_v5.json` | Full video results (450 cuts) — CURRENT |
+| `cutting_fullday.json` | Full day results (1,726 cuts, 7.6hrs) — CURRENT |
+| `cutting_full_v5.json` | 1hr results (450 cuts) |
 | `cutting_full_v4.json` | v4 results (510 cuts) |
 | `cutting_full_v3.json` | v3 results (379 cuts) |
 | `cutting_full_v2.json` | v2 results (333 cuts) |
-| `cutting_test.json` | Short clip results (2 cuts) |
+| `run_full_day.py` | Multi-segment batch processor |
 | `frames/ch19/` | 13 extracted frames for ROI analysis |
 
 ---
 
-## Dashboard v3.0 — Dual Camera (CH19 + CH21)
+## Dashboard v4.0 — Full-Day Dual Camera (CH19 + CH21)
 
 ### Overview
-- **File**: `blanket_tracker_dashboard.html` (~677KB, self-contained)
+- **File**: `blanket_tracker_dashboard.html` (~2.5MB, self-contained)
+- **Hosted**: [sainyam-goel.github.io/blanket-tracker](https://sainyam-goel.github.io/blanket-tracker/) via GitHub Pages (`index.html` = copy of dashboard)
 - **Generator**: `generate_dashboard.py` — reads both JSON data files, compacts, generates HTML
 - **Regenerate**: `python3 generate_dashboard.py`
 - **Rendering**: Native Canvas API charts, no external JS libraries
