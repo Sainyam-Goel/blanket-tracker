@@ -5,8 +5,8 @@ import json
 import sys
 from datetime import datetime
 
-CH19_JSON = "cutting_full_v5.json"
-CH21_JSON = "blanket_count_1hr_v4.json"
+CH19_JSON = "cutting_fullday.json"
+CH21_JSON = "blanket_fullday.json"
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 
 
@@ -17,25 +17,58 @@ def load_and_compact():
     with open(CH21_JSON) as f:
         ch21 = json.load(f)
 
-    ch21_video = ch21["videos"][0]
+    # CH19 fullday already has flat structure — just sample frame_data
+    # Target ~1800 samples for 7.6hrs (1 sample per ~15s)
+    fd = ch19["frame_data"]
+    step = max(1, len(fd) // 1800)
+
+    # CH21 fullday: merge events + frames from all video segments
+    ch21_all_events = []
+    ch21_all_frames = []
+    total_duration = 0
+    first_config = None
+    for vid in ch21["videos"]:
+        ch21_all_events.extend(vid.get("events", []))
+        # Sample frames: ~180 per segment → ~1800 total
+        frames = vid.get("frames", [])
+        frame_step = max(1, len(frames) // 180)
+        ch21_all_frames.extend(frames[::frame_step])
+        seg_dur = vid.get("video_info", {}).get("duration_sec", 0)
+        total_duration += seg_dur
+        if first_config is None:
+            first_config = vid.get("detection_config", {})
+
+    # Sort events by time (should already be sorted due to offsets)
+    ch21_all_events.sort(key=lambda e: e.get("time_sec", 0))
+    ch21_all_frames.sort(key=lambda f: f.get("time_sec", 0))
 
     dashboard_data = {
         "generated_at": datetime.now().isoformat(),
         "ch19": {
             "metadata": ch19["metadata"],
-            "config": ch19["config"],
+            "config": ch19.get("config", {}),
             "summary": ch19["summary"],
+            "segments": ch19.get("segments", []),
             "events": ch19["events"],
             "breaks": ch19["breaks"],
-            "frame_data": ch19["frame_data"][::4],  # ~900 entries
+            "frame_data": fd[::step],
         },
         "ch21": {
-            "video_info": ch21_video["video_info"],
-            "detection_config": ch21_video["detection_config"],
-            "results": ch21_video["results"],
-            "source": ch21_video["source"],
-            "events": ch21_video["events"],
-            "frames": ch21_video["frames"][::100],  # ~899 entries
+            "video_info": {
+                "duration_sec": total_duration,
+                "fps": 25.0,
+                "total_segments": len(ch21["videos"]),
+            },
+            "detection_config": first_config,
+            "results": {
+                "accepted": ch21["total_accepted"],
+                "rejected": ch21["total_rejected"],
+                "total_blankets": ch21["total_blankets"],
+                "table_blanket_off": ch21["total_table_blanket_off"],
+            },
+            "source": "full_day",
+            "events": ch21_all_events,
+            "frames": ch21_all_frames,
         },
     }
     return dashboard_data
@@ -318,6 +351,38 @@ TEMPLATE = r'''<!DOCTYPE html>
 
   canvas { width: 100%; height: 100%; }
 
+  /* Hourly table */
+  .hourly-table-wrap { overflow-x: auto; }
+  .hourly-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+  }
+  .hourly-table th {
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .hourly-table td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid rgba(42,42,61,0.4);
+  }
+  .hourly-table tr:hover td { background: rgba(124,58,237,0.05); }
+  .hourly-table .num { text-align: right; }
+  .hourly-table .bar-cell { width: 120px; }
+  .hourly-bar {
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
   /* Signal charts side by side */
   .signal-row {
     display: grid;
@@ -438,18 +503,18 @@ TEMPLATE = r'''<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- CH21 Weighing -->
+    <!-- CH21 Passing -->
     <div class="kpi-group">
       <div class="kpi-group-header">
         <span class="kpi-group-dot" style="background:var(--ch21)"></span>
-        <span class="kpi-group-title" style="color:var(--ch21)">CH21 — Weighing</span>
+        <span class="kpi-group-title" style="color:var(--ch21)">CH21 — Passing</span>
         <span class="kpi-group-subtitle" id="ch21-duration-label">--</span>
       </div>
       <div class="kpi-row">
         <div class="kpi-card green">
           <div class="kpi-label">Accepted</div>
           <div class="kpi-value" id="kpi-accepted" style="color:var(--accent3)">0</div>
-          <div class="kpi-sub">weighed on scale</div>
+          <div class="kpi-sub" id="kpi-accepted-sub">weighed on scale</div>
         </div>
         <div class="kpi-card red">
           <div class="kpi-label">Rejected</div>
@@ -467,6 +532,17 @@ TEMPLATE = r'''<!DOCTYPE html>
           <div class="kpi-sub">of finished blankets</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Hourly Stats Table -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Hourly Breakdown</span>
+      <span class="panel-tag tag-combined" id="hourly-tag">per clock hour</span>
+    </div>
+    <div class="panel-body">
+      <div class="hourly-table-wrap" id="hourly-table"></div>
     </div>
   </div>
 
@@ -529,7 +605,7 @@ TEMPLATE = r'''<!DOCTYPE html>
   </div>
 
   <footer>
-    <p>Blanket Production Tracker v3.0 &nbsp;|&nbsp; Dual-camera detection &nbsp;|&nbsp; <span id="footer-generated">--</span></p>
+    <p>Blanket Production Tracker v4.0 &nbsp;|&nbsp; Full-day dual-camera &nbsp;|&nbsp; <span id="footer-generated">--</span></p>
   </footer>
 
 </div>
@@ -633,7 +709,10 @@ document.getElementById('ch19-duration-label').textContent =
   fmtDur(ch19Duration) + ' analyzed';
 
 // CH21 KPIs
+const tableFoldEvents = ch21Events.filter(e => e.type === 'table_blanket_off');
 animateCount(document.getElementById('kpi-accepted'), ch21Accepted);
+document.getElementById('kpi-accepted-sub').textContent =
+  'weighed on scale \u00b7 ' + tableFoldEvents.length + ' final folds detected';
 animateCount(document.getElementById('kpi-rejected'), ch21Rejected);
 animateCount(document.getElementById('kpi-finish-rate'), Math.round(ch21Rate));
 animateCount(document.getElementById('kpi-reject-pct'), rejectPct, 1200, 1);
@@ -1279,26 +1358,93 @@ function drawBreakdown() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// HOURLY TABLE
+// ══════════════════════════════════════════════════════════════════
+function renderHourlyTable() {
+  const numHours = Math.ceil(maxDuration / 3600);
+  const hoursCuts = new Array(numHours).fill(0);
+  const hoursAcc = new Array(numHours).fill(0);
+  const hoursRej = new Array(numHours).fill(0);
+  const hoursConfH = new Array(numHours).fill(0);
+  const hoursConfM = new Array(numHours).fill(0);
+  const hoursConfL = new Array(numHours).fill(0);
+
+  for (const ev of ch19Events) {
+    const h = Math.min(Math.floor(ev.time_sec / 3600), numHours - 1);
+    hoursCuts[h]++;
+    if (ev.confidence === 'high') hoursConfH[h]++;
+    else if (ev.confidence === 'medium') hoursConfM[h]++;
+    else hoursConfL[h]++;
+  }
+  const accEvts = ch21Events.filter(e => e.type === 'blanket_accepted');
+  const rejEvts = ch21Events.filter(e => e.type === 'blanket_rejected');
+  for (const ev of accEvts) {
+    const h = Math.min(Math.floor(ev.time_sec / 3600), numHours - 1);
+    hoursAcc[h]++;
+  }
+  for (const ev of rejEvts) {
+    const h = Math.min(Math.floor(ev.time_sec / 3600), numHours - 1);
+    hoursRej[h]++;
+  }
+
+  const maxCutsH = Math.max(...hoursCuts, 1);
+  const maxAccH = Math.max(...hoursAcc, 1);
+  // Clock hour labels (start at 11:00)
+  const startHour = 11;
+
+  let html = '<table class="hourly-table"><thead><tr>';
+  html += '<th>Hour</th><th class="num">Cuts</th><th class="bar-cell">CH19</th>';
+  html += '<th class="num">Accepted</th><th class="num">Rejected</th><th class="bar-cell">CH21</th>';
+  html += '<th class="num">Reject%</th><th class="num">Conf H/M/L</th>';
+  html += '</tr></thead><tbody>';
+
+  for (let h = 0; h < numHours; h++) {
+    const clockH = startHour + h;
+    const label = clockH + ':00';
+    const total21 = hoursAcc[h] + hoursRej[h];
+    const rejPct = total21 > 0 ? (hoursRej[h] / total21 * 100).toFixed(1) : '-';
+    const cutBarW = Math.round(hoursCuts[h] / maxCutsH * 100);
+    const accBarW = Math.round(hoursAcc[h] / maxAccH * 80);
+    const rejBarW = Math.round(hoursRej[h] / maxAccH * 80);
+
+    html += '<tr>';
+    html += '<td>' + label + '</td>';
+    html += '<td class="num" style="color:var(--ch19)">' + hoursCuts[h] + '</td>';
+    html += '<td class="bar-cell"><span class="hourly-bar" style="width:' + cutBarW + 'px;background:var(--ch19);opacity:0.7"></span></td>';
+    html += '<td class="num" style="color:var(--accent3)">' + hoursAcc[h] + '</td>';
+    html += '<td class="num" style="color:var(--red)">' + hoursRej[h] + '</td>';
+    html += '<td class="bar-cell"><span class="hourly-bar" style="width:' + accBarW + 'px;background:var(--accent3);opacity:0.7"></span>';
+    if (hoursRej[h] > 0) html += '<span class="hourly-bar" style="width:' + rejBarW + 'px;background:var(--red);opacity:0.6;margin-left:1px"></span>';
+    html += '</td>';
+    html += '<td class="num">' + rejPct + (rejPct !== '-' ? '%' : '') + '</td>';
+    html += '<td class="num" style="color:var(--muted)">' + hoursConfH[h] + '/' + hoursConfM[h] + '/' + hoursConfL[h] + '</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('hourly-table').innerHTML = html;
+  document.getElementById('hourly-tag').textContent = numHours + ' hours \u00b7 ' + startHour + ':00\u2013' + (startHour + numHours) + ':00';
+}
+
+// ══════════════════════════════════════════════════════════════════
 // SUMMARY PANEL
 // ══════════════════════════════════════════════════════════════════
 function renderSummary() {
   // CH19 summary
   const ch19BreakCount = Math.floor(ch19Breaks.length / 2);
-  const ch19ActiveMin = (ch19ActiveTime / 60).toFixed(1);
-  const ch19BreakMin = (ch19BreakTime / 60).toFixed(1);
+  const fmtTime = (s) => s >= 3600 ? (s / 3600).toFixed(1) + ' hrs' : (s / 60).toFixed(1) + ' min';
 
   document.getElementById('summary-ch19').innerHTML = `
     <h3><span class="dot" style="background:var(--ch19)"></span> CH19 — Cutting Table</h3>
     <div class="stat-row"><span class="stat-label">Total Cuts</span><span class="stat-value" style="color:var(--ch19)">${ch19Cuts}</span></div>
     <div class="stat-row"><span class="stat-label">Active Rate</span><span class="stat-value">${ch19Rate}/min</span></div>
     <div class="stat-row"><span class="stat-label">Avg Cycle</span><span class="stat-value">${ch19AvgCycle}s</span></div>
-    <div class="stat-row"><span class="stat-label">Active Time</span><span class="stat-value">${ch19ActiveMin} min</span></div>
-    <div class="stat-row"><span class="stat-label">Breaks</span><span class="stat-value">${ch19BreakCount} (${ch19BreakMin} min)</span></div>
-    <div class="stat-row"><span class="stat-label">Duration</span><span class="stat-value">${(ch19Duration / 60).toFixed(1)} min</span></div>
+    <div class="stat-row"><span class="stat-label">Active Time</span><span class="stat-value">${fmtTime(ch19ActiveTime)}</span></div>
+    <div class="stat-row"><span class="stat-label">Breaks</span><span class="stat-value">${ch19BreakCount} (${fmtTime(ch19BreakTime)})</span></div>
+    <div class="stat-row"><span class="stat-label">Duration</span><span class="stat-value">${fmtTime(ch19Duration)}</span></div>
   `;
 
   // CH21 summary
-  const ch21DurMin = (ch21Duration / 60).toFixed(1);
   const tableEvents = ch21Events.filter(e => e.type === 'table_blanket_off');
 
   document.getElementById('summary-ch21').innerHTML = `
@@ -1311,15 +1457,16 @@ function renderSummary() {
     <div class="stat-row"><span class="stat-label">Avg Cycle</span><span class="stat-value">${ch21AvgCycle.toFixed(1)}s</span></div>
     <div class="stat-row"><span class="stat-label">Peak (5-min)</span><span class="stat-value">${ch21Peak5}/hr</span></div>
     <div class="stat-row"><span class="stat-label">Table Cycles</span><span class="stat-value">${tableEvents.length}</span></div>
-    <div class="stat-row"><span class="stat-label">Duration</span><span class="stat-value">${ch21DurMin} min</span></div>
+    <div class="stat-row"><span class="stat-label">Duration</span><span class="stat-value">${fmtTime(ch21Duration)}</span></div>
   `;
 
   document.getElementById('summary-tag').textContent =
-    (ch19Duration / 60).toFixed(0) + ' + ' + (ch21Duration / 60).toFixed(0) + ' min analyzed';
+    fmtDur(ch19Duration) + ' + ' + fmtDur(ch21Duration) + ' analyzed';
 }
 
 // ── INIT ────────────────────────────────────────────────────────
 setTimeout(() => {
+  renderHourlyTable();
   drawTimeline();
   drawCH19Signal();
   drawCH21Signal();
@@ -1349,8 +1496,8 @@ def main():
 
     size_kb = len(html) / 1024
     print(f"Generated {OUTPUT_HTML} ({size_kb:.1f} KB)")
-    print(f"  CH19: {data['ch19']['summary']['total_cuts']} cuts, {len(data['ch19']['frame_data'])} frame samples")
-    print(f"  CH21: {data['ch21']['results']['accepted']} accepted, {data['ch21']['results']['rejected']} rejected, {len(data['ch21']['frames'])} frame samples")
+    print(f"  CH19: {data['ch19']['summary']['total_cuts']} cuts, {len(data['ch19']['frame_data'])} frame samples, {data['ch19']['metadata']['duration_sec']/3600:.1f} hrs")
+    print(f"  CH21: {data['ch21']['results']['accepted']} accepted, {data['ch21']['results']['rejected']} rejected, {len(data['ch21']['frames'])} frame samples, {data['ch21']['video_info']['duration_sec']/3600:.1f} hrs")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+# Large data files (keep local, too big for GitHub)
+*_fullday.json
+blanket_count_1hr*.json
+cutting_full_v*.json
+blanket_count_1hr_v*_compact.json
+cutting_test.json
+blanket_count_1hr.json
+test_short.json
+
+# Frames and video data
+frames/
+
+# OS files
+.DS_Store
+
+# Generated artifacts
+*.pdf
