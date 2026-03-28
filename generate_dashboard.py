@@ -570,7 +570,7 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">Finishing Signal</span>
+        <span class="panel-title">Passing Signal</span>
         <span class="panel-tag tag-ch21">CH21 scale + table</span>
       </div>
       <div class="panel-body">
@@ -679,7 +679,7 @@ const rejectPct = ch21Total > 0 ? (ch21Rejected / ch21Total * 100) : 0;
 // ── HEADER & BADGES ─────────────────────────────────────────────
 const fmtDur = (s) => s >= 3600 ? Math.round(s / 3600) + 'hr' : Math.round(s / 60) + 'min';
 document.getElementById('header-subtitle').textContent =
-  'CH19 Cutting + CH21 Finishing \u00b7 Panipat Factory';
+  'CH19 Cutting + CH21 Passing \u00b7 Panipat Factory';
 document.getElementById('badge-ch19').textContent = 'CH19 ' + fmtDur(ch19Duration);
 document.getElementById('badge-ch21').textContent = 'CH21 ' + fmtDur(ch21Duration);
 
@@ -1448,7 +1448,7 @@ function renderSummary() {
   const tableEvents = ch21Events.filter(e => e.type === 'table_blanket_off');
 
   document.getElementById('summary-ch21').innerHTML = `
-    <h3><span class="dot" style="background:var(--ch21)"></span> CH21 — Finishing Station</h3>
+    <h3><span class="dot" style="background:var(--ch21)"></span> CH21 — Passing Station</h3>
     <div class="stat-row"><span class="stat-label">Total Blankets</span><span class="stat-value" style="color:var(--ch21)">${ch21Total}</span></div>
     <div class="stat-row"><span class="stat-label">Accepted</span><span class="stat-value" style="color:var(--accent3)">${ch21Accepted}</span></div>
     <div class="stat-row"><span class="stat-label">Rejected</span><span class="stat-value" style="color:var(--red)">${ch21Rejected}</span></div>
