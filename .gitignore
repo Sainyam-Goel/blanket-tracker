@@ -6,6 +6,7 @@ blanket_count_1hr_v*_compact.json
 cutting_test.json
 blanket_count_1hr.json
 test_short.json
+cutting_v6_gt.json
 
 # Frames and video data
 frames/

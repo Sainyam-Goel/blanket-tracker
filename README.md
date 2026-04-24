@@ -40,7 +40,12 @@ Built for a blanket factory in Panipat, Haryana. The system processes 1920x1080 
 
 ## How It Works
 
-### CH19 — Cutting Counter (v5)
+### CH19 — Cutting Counter (v5-robust / v6-permissive)
+
+Two variants ship side-by-side:
+
+- **v5-robust** (default, precision-biased) — validated 46/46 GT recall, 0 FP on the ground-truthed first hour. Used as the trusted baseline.
+- **v6-permissive** (opt-in via `--version v6`, recall-biased) — designed to address suspected undercounting in the 2-worker scissor phase and bright afternoon lighting where v5 had no ground truth. Changes: dual-ROI OR-gated detection (table **or** left-table triggers a cut), close-pair merge replaced with `close_pair_suspect` flag (both events kept), echo suppression relaxed (ratio 0.6→0.4, window 3.0→1.2s), `DERIV_THRESHOLD_SHORT` lowered 10→8, adaptive break threshold (rolling 60s baseline + 50, not fixed 235), and a full `suppressed_candidates` audit log of every dropped candidate with reason. Run it alongside v5 — the dashboard shows both.
 
 Detects when cut blanket pieces slide off the white table, exposing the surface:
 

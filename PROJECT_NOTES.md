@@ -307,6 +307,26 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ## CH19 Cutting Counter
 
+### v6-permissive (aggressive-recall variant, April 2026)
+
+Motivation: user feedback flagged possible 50% undercount in some sessions. v5 was validated only on the first hour (46/46 GT), leaving 6.6 hrs of the day unverified. Analysis of `cutting_fullday.json` found 291 strong-deriv spikes (>30) that never became cuts, 76 close pairs that survived while others were merged, and hour 14:00 running with 73% deriv<20 — all signals that v5 was over-tuned for precision.
+
+**Changes vs v5** (all gated behind `--version v6`):
+- **Dual-ROI OR-gated detection** — cut fires if table_roi OR left_roi crosses threshold; each event tagged with `roi_source` (`table`/`left`/`both`).
+- **Close-pair merge removed** — replaced with `close_pair_suspect: true` flag; both events kept.
+- **Echo suppression relaxed** — ratio 0.6→0.4, window 3.0→1.2s (true bounces are <1s).
+- **`DERIV_THRESHOLD_SHORT` 10 → 8** — more margin for weak 2-worker signals.
+- **Adaptive break threshold** — rolling 60s baseline + 50 (not fixed 235), hold 4s, exit 1.5s.
+- **Suppression audit log** — every dropped candidate recorded in `suppressed_candidates` with `dropped_by` reason.
+
+**Results:**
+| Dataset | v5 | v6 | Δ |
+|---|---:|---:|---:|
+| 1hr GT video | 450 | 651 | +45% |
+| Full day (7.6 hrs) | 1,726 | 3,061 | +77% |
+
+Full-day v6 rate 7.3 cuts/min active (under 15/min physical ceiling ✓). Confidence breakdown: 1,984 high / 850 med / 227 low — most new detections are high-confidence. Dashboard renders both variants side-by-side; v5 remains the trusted precision baseline.
+
 ### Process
 4 workers at white cutting table (2 in back cut, 2 in front slide pieces off). Blanket spread across table → cut → piece slides down front → repeat. After 29:37 mark, only 2 workers using scissors (rapid 2-3s cycles, weaker signals). Workers always extend hands for full cut. In 4-worker setup, the workers farther from camera make the cuts.
 

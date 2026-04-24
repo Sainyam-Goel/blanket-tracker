@@ -2,10 +2,12 @@
 """Generate dual-camera dashboard HTML with embedded data from CH19 + CH21."""
 
 import json
+import os
 import sys
 from datetime import datetime
 
 CH19_JSON = "cutting_fullday.json"
+CH19_V6_JSON = "cutting_fullday_v6.json"   # optional v6-permissive variant
 CH21_JSON = "blanket_fullday.json"
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 
@@ -42,8 +44,53 @@ def load_and_compact():
     ch21_all_events.sort(key=lambda e: e.get("time_sec", 0))
     ch21_all_frames.sort(key=lambda f: f.get("time_sec", 0))
 
+    # Optional v6-permissive companion (aggressive-recall variant)
+    ch19_v6 = None
+    if os.path.exists(CH19_V6_JSON):
+        try:
+            with open(CH19_V6_JSON) as f:
+                v6 = json.load(f)
+            # Bucket v5 + v6 cuts into hourly bins for a comparison table
+            def hour_bins(events, duration_sec):
+                hrs = int(duration_sec // 3600) + 1
+                bins = [0] * hrs
+                for e in events:
+                    h = int(e.get("time_sec", 0) // 3600)
+                    if 0 <= h < hrs:
+                        bins[h] += 1
+                return bins
+            v5_hours = hour_bins(ch19["events"], ch19["metadata"]["duration_sec"])
+            v6_hours = hour_bins(v6["events"], v6["metadata"]["duration_sec"])
+            # Bucket suppressed candidates by reason per hour
+            suppressed = v6.get("suppressed_candidates", [])
+            suppressed_by_hour = {}
+            for sc in suppressed:
+                h = int(sc.get("time_sec", 0) // 3600)
+                reason = sc.get("dropped_by", "unknown")
+                suppressed_by_hour.setdefault(h, {}).setdefault(reason, 0)
+                suppressed_by_hour[h][reason] += 1
+            ch19_v6 = {
+                "metadata": v6["metadata"],
+                "summary": v6["summary"],
+                "segments": v6.get("segments", []),
+                "v5_hourly": v5_hours,
+                "v6_hourly": v6_hours,
+                "suppressed_count": len(suppressed),
+                "suppressed_by_hour": suppressed_by_hour,
+                "close_pair_suspects": sum(1 for e in v6["events"] if e.get("close_pair_suspect")),
+                "roi_source_counts": {
+                    "table": sum(1 for e in v6["events"] if e.get("roi_source") == "table"),
+                    "left":  sum(1 for e in v6["events"] if e.get("roi_source") == "left"),
+                    "both":  sum(1 for e in v6["events"] if e.get("roi_source") == "both"),
+                },
+            }
+            print(f"  Loaded v6 companion: {v6['summary']['total_cuts']} cuts (v5: {ch19['summary']['total_cuts']})")
+        except Exception as ex:
+            print(f"  WARN: failed to load {CH19_V6_JSON}: {ex}")
+
     dashboard_data = {
         "generated_at": datetime.now().isoformat(),
+        "ch19_v6": ch19_v6,
         "ch19": {
             "metadata": ch19["metadata"],
             "config": ch19.get("config", {}),
@@ -470,6 +517,26 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
   </header>
 
+  <!-- v5 vs v6 comparison banner (rendered if v6 data is present) -->
+  <div id="v6-banner" style="display:none; margin: 12px 0 20px 0; padding: 14px 18px; border: 1px solid #2a2f3a; background: linear-gradient(90deg, rgba(245,158,11,0.06), rgba(59,130,246,0.06)); border-radius: 10px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap: 24px; flex-wrap: wrap;">
+      <div>
+        <div style="font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color:#9ca3af;">CH19 algorithm comparison</div>
+        <div style="font-size: 18px; font-weight: 600; margin-top: 4px;">
+          v5-robust: <span id="v6b-v5" style="color:var(--ch19)">—</span> cuts
+          &nbsp;·&nbsp; v6-permissive: <span id="v6b-v6" style="color:#f59e0b">—</span> cuts
+          &nbsp;·&nbsp; Δ <span id="v6b-delta" style="color:#9ca3af">—</span>
+        </div>
+        <div style="font-size: 12px; color:#9ca3af; margin-top: 4px;" id="v6b-sub">v6 uses dual-ROI, relaxed echo, adaptive break threshold, and logs every suppression for audit.</div>
+      </div>
+      <div style="font-size: 12px; color:#9ca3af; text-align:right;">
+        <div>ROI source: <span id="v6b-roi">—</span></div>
+        <div>Close-pair suspects: <span id="v6b-pairs">—</span></div>
+        <div>Suppressed candidates: <span id="v6b-supp">—</span></div>
+      </div>
+    </div>
+  </div>
+
   <!-- KPI Cards: CH19 left, CH21 right -->
   <div class="kpi-split">
     <!-- CH19 Cutting -->
@@ -619,6 +686,29 @@ const D = %%DASHBOARD_DATA%%;
 // ── PARSE DATA ──────────────────────────────────────────────────
 const ch19 = D.ch19;
 const ch21 = D.ch21;
+const ch19v6 = D.ch19_v6;  // optional v6-permissive variant
+
+// ── v5/v6 COMPARISON BANNER ─────────────────────────────────────
+if (ch19v6) {
+  const banner = document.getElementById('v6-banner');
+  if (banner) {
+    banner.style.display = 'block';
+    const v5c = ch19.summary.total_cuts;
+    const v6c = ch19v6.summary.total_cuts;
+    const delta = v6c - v5c;
+    const pct = v5c > 0 ? ((delta / v5c) * 100).toFixed(1) : '0';
+    document.getElementById('v6b-v5').textContent = v5c.toLocaleString();
+    document.getElementById('v6b-v6').textContent = v6c.toLocaleString();
+    const deltaStr = (delta >= 0 ? '+' : '') + delta.toLocaleString() + ' (' + (delta >= 0 ? '+' : '') + pct + '%)';
+    const deltaEl = document.getElementById('v6b-delta');
+    deltaEl.textContent = deltaStr;
+    deltaEl.style.color = delta >= 0 ? '#34d399' : '#f87171';
+    const r = ch19v6.roi_source_counts || {table:0,left:0,both:0};
+    document.getElementById('v6b-roi').textContent = `${r.table} table · ${r.left} left · ${r.both} both`;
+    document.getElementById('v6b-pairs').textContent = (ch19v6.close_pair_suspects || 0).toLocaleString() + ' (flagged, kept)';
+    document.getElementById('v6b-supp').textContent = (ch19v6.suppressed_count || 0).toLocaleString() + ' (audit log)';
+  }
+}
 
 // CH19 derived
 const ch19Events = ch19.events;  // cut events

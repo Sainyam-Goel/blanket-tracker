@@ -24,6 +24,7 @@ CUTTING_DIR = DATA / "Cutting"
 PASSING_DIR = DATA / "Passing"
 
 CH19_OUTPUT = BASE / "cutting_fullday.json"
+CH19_OUTPUT_V6 = BASE / "cutting_fullday_v6.json"
 CH21_OUTPUT = BASE / "blanket_fullday.json"
 
 
@@ -45,7 +46,7 @@ def get_video_duration(path):
     return frames / fps
 
 
-def run_ch19(videos):
+def run_ch19(videos, version="v5"):
     """Process all CH19 videos sequentially, merge with time offsets."""
     sys.path.insert(0, str(BASE))
     from cutting_counter import CuttingCounter
@@ -53,6 +54,7 @@ def run_ch19(videos):
     all_events = []
     all_breaks = []
     all_frame_data = []
+    all_suppressed = []
     total_duration = 0.0
     total_frames = 0
     total_processing = 0.0
@@ -64,7 +66,7 @@ def run_ch19(videos):
         print(f"  Time offset: {total_duration:.1f}s ({total_duration/60:.1f} min)")
         print(f"{'='*70}")
 
-        counter = CuttingCounter(video)
+        counter = CuttingCounter(video, version=version)
         results = counter.run()
 
         seg_duration = results["metadata"]["duration_sec"]
@@ -90,6 +92,12 @@ def run_ch19(videos):
             fd["time_sec"] = round(fd["time_sec"] + total_duration, 2)
             fd["frame"] = fd["frame"] + total_frames
             all_frame_data.append(fd)
+
+        # Offset suppressed candidates (v6 audit log)
+        for sc in results.get("suppressed_candidates", []):
+            sc["time_sec"] = round(sc.get("time_sec", 0) + total_duration, 2)
+            sc["segment"] = i
+            all_suppressed.append(sc)
 
         segment_info.append({
             "file": os.path.basename(video),
@@ -136,12 +144,12 @@ def run_ch19(videos):
             "duration_sec": round(total_duration, 2),
             "total_frames": total_frames,
             "processing_time_sec": round(total_processing, 2),
-            "version": "v5-robust",
+            "version": "v6-permissive" if version == "v6" else "v5-robust",
             "generated_at": datetime.now().isoformat(),
         },
         "segments": segment_info,
         "config": {
-            "note": "Same config as v5-robust, see cutting_counter.py"
+            "note": f"See cutting_counter.py ({version})"
         },
         "summary": {
             "total_cuts": total_cuts,
@@ -156,6 +164,7 @@ def run_ch19(videos):
         "events": all_events,
         "breaks": all_breaks,
         "frame_data": all_frame_data[::4],  # Sample every 4th for size
+        "suppressed_candidates": all_suppressed,
     }
 
     # First-hour sanity check
@@ -269,6 +278,19 @@ def run_ch21(videos):
 def main():
     import multiprocessing
 
+    # Parse --version flag (v5 default, v6 optional)
+    version = "v5"
+    if "--version" in sys.argv:
+        idx = sys.argv.index("--version")
+        if idx + 1 < len(sys.argv):
+            version = sys.argv[idx + 1]
+        if version not in ("v5", "v6"):
+            print(f"ERROR: --version must be v5 or v6 (got {version})")
+            sys.exit(1)
+
+    ch19_output = CH19_OUTPUT_V6 if version == "v6" else CH19_OUTPUT
+    print(f"CH19 variant: {version} → {ch19_output.name}")
+
     ch19_videos = sorted_videos(CUTTING_DIR)
     ch21_videos = sorted_videos(PASSING_DIR)
 
@@ -284,20 +306,21 @@ def main():
     ch21_result = None
 
     if "--ch19-only" in sys.argv:
-        ch19_result = run_ch19(ch19_videos)
+        ch19_result = run_ch19(ch19_videos, version=version)
     elif "--ch21-only" in sys.argv:
         ch21_result = run_ch21(ch21_videos)
     else:
         # Sequential both (run in separate terminals for parallel)
-        ch19_result = run_ch19(ch19_videos)
+        ch19_result = run_ch19(ch19_videos, version=version)
         ch21_result = run_ch21(ch21_videos)
 
     # Save results
     if ch19_result:
-        CH19_OUTPUT.write_text(json.dumps(ch19_result, indent=2))
-        print(f"\nCH19 saved to: {CH19_OUTPUT}")
+        ch19_output.write_text(json.dumps(ch19_result, indent=2))
+        print(f"\nCH19 saved to: {ch19_output}")
         print(f"  {ch19_result['summary']['total_cuts']} cuts over "
-              f"{ch19_result['metadata']['duration_sec']/3600:.1f} hrs")
+              f"{ch19_result['metadata']['duration_sec']/3600:.1f} hrs "
+              f"(variant: {ch19_result['metadata']['version']})")
 
     if ch21_result:
         CH21_OUTPUT.write_text(json.dumps(ch21_result, indent=2))

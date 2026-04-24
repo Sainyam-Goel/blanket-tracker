@@ -1,7 +1,20 @@
 """
 CH19 Cutting Counter — Counts blanket cuts from NVR camera feed.
 
-Detection approach (v5): Multi-scale derivative + multi-ROI + close-pair merge.
+Detection approach (v5 / v6): Multi-scale derivative + multi-ROI + close-pair merge.
+
+  v6-permissive (pass --version v6): aggressive-recall variant that addresses
+  suspected undercounting in 2-worker scissor phase and bright afternoon lighting.
+  Changes from v5:
+    - Dual-ROI detection: cut fires if EITHER table_roi OR left_roi crosses
+      threshold (not just table_roi). Each event tagged with roi_source.
+    - Close-pair merge REMOVED: close pairs are flagged (close_pair_suspect=True)
+      but both kept. User can filter downstream if desired.
+    - Echo suppression relaxed: ratio 0.6→0.4, window 3.0s→1.2s.
+    - Adaptive break threshold: rolling-baseline + 50 (not fixed 235), hold 4s.
+    - DERIV_THRESHOLD_SHORT: 10.0 → 8.0 (more margin for weak 2-worker signals).
+    - Suppression audit log: every candidate dropped by any filter is logged
+      to `suppressed_candidates` with reason, for downstream review.
 
   When a cut piece slides off the table, the white surface is exposed,
   causing a rapid brightness INCREASE in the table ROI. We detect these
@@ -92,6 +105,24 @@ BREAK_EXIT_FRAMES = 25      # must drop below for 1s to exit break
 # ── Output ──
 FRAME_SAMPLE_RATE = 25      # store frame_data every N frames (1 per second)
 
+# ═══════════════════════════════════════════════════════════════
+#  V6-PERMISSIVE CONFIG OVERRIDES (aggressive recall)
+# ═══════════════════════════════════════════════════════════════
+V6_CONFIG = {
+    "deriv_threshold_short": 8.0,       # was 10.0 — more margin for 2-worker
+    "echo_window_sec": 1.2,             # was 3.0 — only catch true bounces
+    "echo_ratio": 0.4,                  # was 0.6 — only suppress much weaker echoes
+    "close_pair_gap": 2.5,              # same — used ONLY for flagging now
+    "close_pair_deriv": 30.0,           # same — flag threshold
+    "break_hold_frames": 100,           # was 75 — need 4s sustained (not 3s)
+    "break_exit_frames": 38,            # was 25 — need 1.5s below (not 1s)
+    "break_offset_above_baseline": 50,  # new: adaptive threshold = baseline + 50
+    "baseline_window_frames": 1500,     # new: 60s rolling baseline (at 25fps)
+    "dual_roi": True,                   # new: cut fires if EITHER ROI triggers
+    "merge_close_pairs": False,         # new: v6 does NOT merge, only flags
+    "audit_suppressions": True,         # new: log every dropped candidate
+}
+
 
 # ═══════════════════════════════════════════════════════════════
 #  CUTTING COUNTER
@@ -100,6 +131,13 @@ FRAME_SAMPLE_RATE = 25      # store frame_data every N frames (1 per second)
 class CuttingCounter:
     def __init__(self, video_path, **config):
         self.video_path = video_path
+
+        # Version selection (v5 = default/legacy, v6 = permissive/aggressive-recall)
+        self.version = config.get("version", "v5")
+        if self.version == "v6":
+            # v6 overrides only apply if caller didn't explicitly pass them
+            for k, v in V6_CONFIG.items():
+                config.setdefault(k, v)
 
         # Config overrides
         self.table_roi = config.get("table_roi", TABLE_ROI)
@@ -115,8 +153,15 @@ class CuttingCounter:
         self.deriv_confirm_strong = config.get("deriv_confirm_strong", DERIV_CONFIRM_STRONG)
         self.min_cycle = config.get("min_cycle", MIN_CYCLE_FRAMES)
         self.break_brightness = config.get("break_brightness", BREAK_BRIGHTNESS)
-        self.break_hold = config.get("break_hold", BREAK_HOLD_FRAMES)
-        self.break_exit = config.get("break_exit", BREAK_EXIT_FRAMES)
+        self.break_hold = config.get("break_hold_frames", config.get("break_hold", BREAK_HOLD_FRAMES))
+        self.break_exit = config.get("break_exit_frames", config.get("break_exit", BREAK_EXIT_FRAMES))
+        # v6 adaptive break threshold
+        self.break_offset = config.get("break_offset_above_baseline", 0)  # 0 = disabled (v5)
+        self.baseline_window = config.get("baseline_window_frames", 1500)
+        # v6 dual-ROI + merge + audit toggles
+        self.dual_roi = config.get("dual_roi", False)
+        self.merge_close_pairs_enabled = config.get("merge_close_pairs", True)
+        self.audit_suppressions = config.get("audit_suppressions", False)
         self.echo_window_sec = config.get("echo_window_sec", ECHO_WINDOW_SEC)
         self.echo_ratio = config.get("echo_ratio", ECHO_RATIO)
         self.close_pair_gap = config.get("close_pair_gap", CLOSE_PAIR_GAP)
@@ -154,11 +199,16 @@ class CuttingCounter:
         # Multi-ROI tracking for current spike
         self.spike_left_deriv_peak = 0
         self.spike_spatial_std_at_peak = 0
+        self.spike_roi_source = None  # "table" | "left" | "both" (v6)
+
+        # v6 rolling baseline for adaptive break threshold
+        self.baseline_buffer = deque(maxlen=self.baseline_window)
 
         # Results
         self.cuts = []
         self.breaks = []
         self.frame_data = []
+        self.suppressed_candidates = []  # v6 audit log
         self.fps = 25.0
 
     def _get_smoothed(self, raw):
@@ -196,17 +246,38 @@ class CuttingCounter:
             d_short = current - self.smoothed_history[-self.deriv_window_short]
         return d_long, d_short
 
-    def _check_threshold(self, d_long, d_short):
+    def _check_threshold(self, d_long, d_short, left_deriv=0.0):
         """Check if EITHER derivative window crosses its threshold.
 
-        Returns (passes, effective_deriv) where effective_deriv is the
-        best derivative value for confidence scoring.
+        Returns (passes, effective_deriv, roi_source) where:
+          - effective_deriv is the best derivative value for peak tracking
+          - roi_source is "table" | "left" | "both" (v6 dual-ROI) or None (v5)
         """
         long_pass = d_long >= self.deriv_threshold_long
         short_pass = d_short >= self.deriv_threshold_short
-        # Use the stronger signal for peak tracking
+        table_pass = long_pass or short_pass
+
         effective = max(d_long, d_short)
-        return (long_pass or short_pass), effective
+
+        if not self.dual_roi:
+            return table_pass, effective, ("table" if table_pass else None)
+
+        # v6 dual-ROI: left ROI uses the SHORT threshold (same semantics)
+        left_pass = left_deriv >= self.deriv_threshold_short
+
+        if table_pass and left_pass:
+            source = "both"
+        elif table_pass:
+            source = "table"
+        elif left_pass:
+            source = "left"
+        else:
+            source = None
+
+        if left_pass and left_deriv > effective:
+            effective = left_deriv
+
+        return (table_pass or left_pass), effective, source
 
     def _compute_slide_motion(self, gray):
         """Frame-to-frame diff in slide ROI."""
@@ -218,10 +289,26 @@ class CuttingCounter:
         self.prev_slide_region = slide_region
         return motion
 
+    def _current_break_threshold(self):
+        """v5: fixed self.break_brightness. v6: rolling-baseline + offset (robust)."""
+        if self.break_offset <= 0 or len(self.baseline_buffer) < 100:
+            return self.break_brightness
+        # Use median for robustness against spikes
+        baseline = float(np.median(self.baseline_buffer))
+        adaptive = baseline + self.break_offset
+        # Never go below the v5 safety floor (avoids ridiculously low thresholds early)
+        return max(adaptive, self.break_brightness - 20)
+
     def _update_break_state(self, smoothed, frame_idx):
-        """Detect break periods (empty table)."""
+        """Detect break periods (empty table). v6 uses adaptive threshold."""
+        # v6: maintain rolling baseline (only when not in a spike and not in break)
+        if self.break_offset > 0 and not self.in_break and not self.spike_detected:
+            self.baseline_buffer.append(smoothed)
+
+        threshold = self._current_break_threshold()
+
         if not self.in_break:
-            if smoothed > self.break_brightness:
+            if smoothed > threshold:
                 self.break_counter += 1
                 if self.break_counter >= self.break_hold:
                     self.in_break = True
@@ -238,7 +325,7 @@ class CuttingCounter:
             else:
                 self.break_counter = 0
         else:
-            if smoothed < self.break_brightness:
+            if smoothed < threshold:
                 self.break_exit_counter += 1
                 if self.break_exit_counter >= self.break_exit:
                     self.in_break = False
@@ -272,7 +359,8 @@ class CuttingCounter:
 
         # 2. Multi-scale derivatives
         d_long, d_short = self._get_derivatives()
-        passes_threshold, effective_deriv = self._check_threshold(d_long, d_short)
+        passes_threshold, effective_deriv, roi_source = self._check_threshold(
+            d_long, d_short, left_deriv)
 
         # 3. Slide motion
         slide_motion = self._compute_slide_motion(gray)
@@ -307,9 +395,19 @@ class CuttingCounter:
                             self.slide_motion_peak = slide_motion
                             self.spike_left_deriv_peak = left_deriv
                             self.spike_spatial_std_at_peak = spatial_std
+                            self.spike_roi_source = roi_source
                             self.spike_duration = 0
                         else:
-                            # Too close to last cut — reset
+                            # Too close to last cut — reset + audit log
+                            if self.audit_suppressions:
+                                self.suppressed_candidates.append({
+                                    "time_sec": round(frame_idx / self.fps, 2),
+                                    "peak_deriv": round(self.spike_peak_deriv_candidate, 1),
+                                    "peak_brightness": round(smoothed, 1),
+                                    "roi_source": roi_source,
+                                    "dropped_by": "min_gap",
+                                    "preceding_cut_time": round(self.last_cut_frame / self.fps, 2),
+                                })
                             self.deriv_confirm_counter = 0
                             self.spike_peak_deriv_candidate = 0
                 else:
@@ -318,6 +416,11 @@ class CuttingCounter:
                     if effective_deriv > self.spike_peak_deriv:
                         self.spike_peak_deriv = effective_deriv
                         self.spike_spatial_std_at_peak = spatial_std
+                        # Upgrade roi_source if stronger signal comes from different ROI
+                        if roi_source == "both":
+                            self.spike_roi_source = "both"
+                        elif self.spike_roi_source and roi_source and roi_source != self.spike_roi_source:
+                            self.spike_roi_source = "both"
                     if smoothed > self.spike_peak_brightness:
                         self.spike_peak_brightness = smoothed
                     self.slide_motion_peak = max(self.slide_motion_peak, slide_motion)
@@ -349,6 +452,7 @@ class CuttingCounter:
                         "left_deriv": round(self.spike_left_deriv_peak, 1),
                         "spatial_std": round(self.spike_spatial_std_at_peak, 1),
                         "ceiling_flag": ceiling_flag,
+                        "roi_source": self.spike_roi_source or "table",
                         "confidence": confidence,
                     }
                     self.cuts.append(cut_event)
@@ -369,15 +473,26 @@ class CuttingCounter:
                     self.slide_motion_peak = 0
                     self.spike_left_deriv_peak = 0
                     self.spike_spatial_std_at_peak = 0
+                    self.spike_roi_source = None
                     self.spike_duration = 0
 
                 self.deriv_confirm_counter = 0
                 self.spike_peak_deriv_candidate = 0
         else:
-            # Reset spike state during breaks
+            # Reset spike state during breaks — audit log any in-flight candidate
+            if self.audit_suppressions and self.spike_detected and self.spike_start_frame is not None:
+                self.suppressed_candidates.append({
+                    "time_sec": round(self.spike_start_frame / self.fps, 2),
+                    "peak_deriv": round(self.spike_peak_deriv, 1),
+                    "peak_brightness": round(self.spike_peak_brightness, 1),
+                    "roi_source": self.spike_roi_source,
+                    "dropped_by": "break",
+                    "preceding_cut_time": round(self.last_cut_frame / self.fps, 2),
+                })
             self.spike_detected = False
             self.deriv_confirm_counter = 0
             self.spike_peak_deriv_candidate = 0
+            self.spike_roi_source = None
 
         # 6. Store frame data (sampled)
         if frame_idx % self.sample_rate == 0:
@@ -414,7 +529,9 @@ class CuttingCounter:
         self.fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        print(f"CH19 Cutting Counter v5 (multi-scale + multi-ROI + close-pair merge)")
+        variant = "v6-permissive (dual-ROI, adaptive break, flag-only close-pairs)" \
+            if self.version == "v6" else "v5-robust (multi-scale + multi-ROI + close-pair merge)"
+        print(f"CH19 Cutting Counter {variant}")
         print(f"  Video: {self.video_path}")
         print(f"  FPS: {self.fps:.1f}, Frames: {total_frames}, "
               f"Duration: {total_frames/self.fps:.1f}s ({total_frames/self.fps/60:.1f} min)")
@@ -432,6 +549,12 @@ class CuttingCounter:
         print(f"  Close-pair merge: gap<={self.close_pair_gap}s, deriv>{self.close_pair_deriv}")
         print(f"  Left-table ROI: {self.left_table_roi}")
         print(f"  Brightness ceiling: {self.brightness_ceiling}")
+        if self.version == "v6":
+            print(f"  [v6] Dual-ROI detection: ENABLED (OR-gated)")
+            print(f"  [v6] Close-pair merge: DISABLED (flag-only)")
+            print(f"  [v6] Adaptive break threshold: baseline + {self.break_offset} "
+                  f"(min {self.break_brightness - 20})")
+            print(f"  [v6] Audit suppression log: ENABLED")
         print()
 
         start_time = time.time()
@@ -513,6 +636,16 @@ class CuttingCounter:
             low_conf = sum(1 for c in self.cuts if c.get("confidence") == "low")
             print(f"  Confidence:           {high_conf} high, {med_conf} medium, {low_conf} low")
 
+            if self.version == "v6":
+                roi_table = sum(1 for c in self.cuts if c.get("roi_source") == "table")
+                roi_left = sum(1 for c in self.cuts if c.get("roi_source") == "left")
+                roi_both = sum(1 for c in self.cuts if c.get("roi_source") == "both")
+                flagged = sum(1 for c in self.cuts if c.get("close_pair_suspect"))
+                print(f"  ROI source:           {roi_table} table, {roi_left} left, {roi_both} both")
+                print(f"  Close-pair suspects:  {flagged} events (not dropped)")
+                print(f"  Suppressed candidates: {len(self.suppressed_candidates)} "
+                      f"(audit log)")
+
             print(f"\n  First 10 cuts:")
             for i, cut in enumerate(self.cuts[:10]):
                 mins = int(cut['time_sec'] // 60)
@@ -559,7 +692,7 @@ class CuttingCounter:
                 "duration_sec": round(duration_sec, 2),
                 "total_frames": frame_idx,
                 "processing_time_sec": round(elapsed, 2),
-                "version": "v5-robust",
+                "version": "v6-permissive" if self.version == "v6" else "v5-robust",
             },
             "config": {
                 "table_roi": list(self.table_roi),
@@ -591,6 +724,7 @@ class CuttingCounter:
             "events": self.cuts,
             "breaks": self.breaks,
             "frame_data": self.frame_data,
+            "suppressed_candidates": self.suppressed_candidates,
         }
 
         return results
@@ -629,10 +763,21 @@ class CuttingCounter:
 
             if not is_echo:
                 filtered.append(cut)
-            elif self.debug:
-                t = cut["time_sec"]
-                print(f"  ~~~ ECHO suppressed at {int(t)//60}:{t%60:05.2f} "
-                      f"(deriv={cut['peak_deriv']:.1f}, prev={self.cuts[j]['peak_deriv']:.1f})")
+            else:
+                if self.audit_suppressions:
+                    self.suppressed_candidates.append({
+                        "time_sec": cut["time_sec"],
+                        "peak_deriv": cut["peak_deriv"],
+                        "peak_brightness": cut.get("peak_brightness", 0),
+                        "roi_source": cut.get("roi_source"),
+                        "dropped_by": "echo",
+                        "preceding_cut_time": self.cuts[j]["time_sec"],
+                        "preceding_cut_deriv": self.cuts[j]["peak_deriv"],
+                    })
+                if self.debug:
+                    t = cut["time_sec"]
+                    print(f"  ~~~ ECHO suppressed at {int(t)//60}:{t%60:05.2f} "
+                          f"(deriv={cut['peak_deriv']:.1f}, prev={self.cuts[j]['peak_deriv']:.1f})")
 
         suppressed = original_count - len(filtered)
         if suppressed > 0:
@@ -711,6 +856,23 @@ class CuttingCounter:
         if not self.cuts or self.close_pair_gap <= 0:
             return
 
+        # v6: flag-only mode — keep all events, add close_pair_suspect metadata
+        if not self.merge_close_pairs_enabled:
+            flagged = 0
+            for i in range(1, len(self.cuts)):
+                gap = self.cuts[i]["time_sec"] - self.cuts[i-1]["time_sec"]
+                if gap <= self.close_pair_gap:
+                    max_d = max(self.cuts[i-1]["peak_deriv"], self.cuts[i]["peak_deriv"])
+                    if max_d > self.close_pair_deriv:
+                        self.cuts[i]["close_pair_suspect"] = True
+                        self.cuts[i-1]["close_pair_suspect"] = True
+                        flagged += 1
+            if flagged > 0:
+                print(f"  Close-pair flag: marked {flagged} pairs as suspect "
+                      f"(gap<={self.close_pair_gap}s, deriv>{self.close_pair_deriv}) — NOT merged")
+            return
+
+        # v5: original merge behavior
         original_count = len(self.cuts)
         result = [self.cuts[0]]
 
@@ -720,6 +882,15 @@ class CuttingCounter:
                 max_d = max(result[-1]["peak_deriv"], self.cuts[i]["peak_deriv"])
                 if max_d > self.close_pair_deriv:
                     # Same physical event — keep the stronger detection
+                    dropped = self.cuts[i] if result[-1]["peak_deriv"] >= self.cuts[i]["peak_deriv"] else result[-1]
+                    if self.audit_suppressions:
+                        self.suppressed_candidates.append({
+                            "time_sec": dropped["time_sec"],
+                            "peak_deriv": dropped["peak_deriv"],
+                            "peak_brightness": dropped.get("peak_brightness", 0),
+                            "roi_source": dropped.get("roi_source"),
+                            "dropped_by": "close_pair_merge",
+                        })
                     if self.cuts[i]["peak_deriv"] > result[-1]["peak_deriv"]:
                         if self.debug:
                             t1 = result[-1]["time_sec"]
@@ -762,10 +933,12 @@ class CuttingCounter:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="CH19 Cutting Counter v5")
+    parser = argparse.ArgumentParser(description="CH19 Cutting Counter (v5-robust / v6-permissive)")
     parser.add_argument("video", help="Path to video file or RTSP URL")
     parser.add_argument("--output", "-o", help="Output JSON path")
     parser.add_argument("--debug", "-d", action="store_true", help="Verbose debug output")
+    parser.add_argument("--version", choices=["v5", "v6"], default="v5",
+                        help="Algorithm variant: v5-robust (default, precision-biased) or v6-permissive (recall-biased)")
 
     # Config overrides
     parser.add_argument("--threshold-long", type=float, default=DERIV_THRESHOLD_LONG,
@@ -782,6 +955,7 @@ def main():
     counter = CuttingCounter(
         args.video,
         debug=args.debug,
+        version=args.version,
         deriv_threshold_long=args.threshold_long,
         deriv_threshold_short=args.threshold_short,
         smooth_window=args.smooth,
