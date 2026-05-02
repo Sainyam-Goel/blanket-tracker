@@ -336,6 +336,44 @@ After labeling all three (~90 min user time), we'll have ~200 events spanning
 peak/slowdown/recovery — enough to train a RandomForest pulse classifier and
 ship CH27 v4.
 
+### Bug fixes shipped after first user test (commit pending)
+- **First-frame render**: cv2 sometimes returned None on the very first
+  `cap.set(POS_FRAMES, 0) + cap.read()` call against HEVC video. Fixed by
+  warm-reading frame 0 in `__init__` before `_render_frame()`. On render
+  failure, the canvas now shows a yellow placeholder instead of staying blank.
+- **Tab key was eaten by Tk's focus traversal** after the first press
+  (the lambda returned the right value but Tk still moved focus). Fixed by
+  binding Tab to a named handler (`_on_tab_key`) that explicitly returns
+  `"break"`, AND binding Tab on every focus-stealing widget (canvas,
+  listbox, slider). Added **T** as an alternative key.
+- Added `self.root.focus_force()` after init so keyboard bindings fire
+  immediately without clicking on the window first.
+
+### Known open issues from second user test
+1. **No autoplay**: video doesn't start playing automatically; requires Space
+   to begin. Need to either default `is_playing=True` on init or make the
+   play state more obvious.
+2. **Active-table indicator is unclear**: the small "ACTIVE: LEFT/RIGHT"
+   badge in the toolbar + canvas overlay isn't prominent enough.
+   Possible fixes: large central badge, color the side-panel header by
+   active table, or highlight only the active table's ROI on the canvas.
+
+### Workflow per clip (~30 min each)
+1. **First pass — pick LEFT or RIGHT table** (Tab to switch). User does one
+   table per pass to avoid context-switching mid-scrub.
+2. Step through with → arrow. For each v2-auto label (amber):
+   - Real toss on this table → leave it (or click Confirm v2)
+   - False positive → click + Backspace to delete (becomes a NEGATIVE
+     training example for the classifier)
+   - Wrong timing → click then arrow keys to scrub, A/D to re-mark at
+     correct frame
+3. For events v2 missed entirely → step to that frame, press D (toss) or A (load)
+4. **Cmd+S to save** (autosaves every 30s anyway)
+5. Tab → switch to other table → repeat
+
+The `*.labels.json` sidecars are TRACKED in git (only the .mp4 files are
+gitignored). The classifier-training script will read them directly.
+
 ---
 
 ## CH27 Taping Counter — v2 (May 2026, precision-tuned via 5-min GT clip)
@@ -752,3 +790,116 @@ Header (title + CH19/CH21 duration badges)
 13. **Cross-ROI validation provides confidence, not gating**: A second ROI (left table) shows that real cuts have positive left_deriv (whole table brightens) while FPs have negative left_deriv (returning to baseline). However, this is more useful as metadata for confidence scoring than as a hard gate, because the overlap between distributions is too large.
 
 14. **Parameter sweeps on pre-extracted signals are 100x faster**: Extracting signal data from a video region once, then simulating detector configurations in Python, allows testing ~45 configs in seconds vs minutes per full video run. Essential for systematic tuning.
+
+---
+
+# CURRENT STATE SNAPSHOT (anyone-pick-up-the-thread)
+
+> Last updated: 2026-05-02
+
+## Where the project is right now
+
+| Camera | Algorithm | F1 / accuracy | Status |
+|---|---|---|---|
+| **CH19 cutting** | v6-permissive | Validated 100% recall on 1hr GT | Production, dashboard live |
+| **CH21 passing** | v4 | 92% accepted recall | Production, dashboard live |
+| **CH27 taping** | **v2 (default), v3 plumbing dormant** | **F1=0.85** on 5-min GT (60 events) | Production, dashboard live, **stuck at ceiling** |
+
+## The active question
+
+**How do we push CH27 from F1=0.85 → 0.92+?**
+
+Algorithm tuning is exhausted (tried optical-flow direction filter, dual-path
+detection, conservative break mode, common-mode keyframe-artifact subtraction —
+all either neutral or worse). The remaining ~12 missed events on the GT clip
+are at fundamental signal limits.
+
+**Path forward = train a learned pulse-shape classifier on more labeled data.**
+
+## What's already done for the classifier path
+
+1. **`gt_labeler.py` shipped** (commit `da274d9`) — frame-accurate desktop tool
+   - Pre-populates suggested events from v2 (cached so it runs once per clip)
+   - A=load, D=toss, Tab/T=switch table, ←/→ step frames
+   - Saves to sidecar `<video>.labels.json` (TRACKED in git)
+   - Bugs from first user test fixed locally (autoplay + active-table indicator
+     still pending)
+2. **3 priority clips extracted** to `gt_clips/`:
+   - `gt_clip1_morning.mp4` (10:35–10:40, peak production, most diversity)
+   - `gt_clip2_prelunch.mp4` (12:25–12:30, slowdown into break)
+   - `gt_clip3_postlunch.mp4` (14:15–14:20, post-break ramp-up)
+3. **v2 pre-population cache** for clip 1 already generated
+   (`gt_clips/gt_clip1_morning.v2_detections.json`, 58 candidate tosses)
+
+## The remaining work (in order)
+
+1. **Fix labeler UX bugs** (user blocked on these)
+   - Make video autoplay on open OR make play state more obvious
+   - Make active-table indicator unmissable (large badge, side-panel
+     color, ROI highlighting, etc.)
+2. **User labels 3 clips** (~30 min × 3 = ~90 min total work)
+   - Output: ~200 labeled events in `gt_clips/*.labels.json`
+3. **Build `train_taping_classifier.py`** (~4 hrs work)
+   - Loads all `*.labels.json` sidecars
+   - Re-runs v2 in candidate-collection mode (every plausible air pulse,
+     not just the ones that passed thresholds)
+   - Auto-labels candidates by matching against manual GT (TP if within 2s)
+   - Extracts 12 features per pulse:
+     peak_height, duration, rise_time, decay_time, skewness, AUC,
+     max_derivative, pre_peak_table_max, post_peak_table_min, table_drop,
+     ctx_signal_at_peak, common_mode_diff
+   - Trains a RandomForest (100 trees, max_depth 4, class_weight balanced)
+   - 5-fold CV F1 reported
+   - Saves `taping_pulse_classifier.pkl`
+4. **CH27 v4 integration**
+   - Replace v2's hard threshold on air_motion_peak with
+     `classifier.predict_proba(features) > 0.5`
+   - Re-enable optical-flow plumbing as one of the input features
+   - Validate against held-out clip
+   - Expected F1: 0.85 → 0.92+
+5. **Run v4 full day, regenerate dashboard, commit + push**
+
+## Key files (all in `/Users/sai/Desktop/Claude Coding/blanket-tracker/`)
+
+| File | Role |
+|---|---|
+| `taping_counter.py` | v1/v2/v3 detection algorithm |
+| `gt_labeler.py` | Labeling tool (this is what user is currently using) |
+| `taping_roi_calibrator.py` | ROI overlay tool for tuning table boxes |
+| `run_full_day.py` | Multi-segment batch processor (CH19+CH21+CH27) |
+| `generate_dashboard.py` | HTML dashboard generator |
+| `taping_fullday.json` | v2 production output (1,887 cycles, 9 hr) |
+| `gt_clips/*.mp4` | Three priority labeling clips (gitignored — too big) |
+| `gt_clips/*.labels.json` | GT labels (TRACKED in git — feed the classifier) |
+| `gt_clips/*.v2_detections.json` | v2 pre-population cache (gitignored) |
+| `Taping Cam27/` | Full-day NVR source (gitignored) |
+| `/tmp/gt_5min.mp4` | The original 60-event GT clip used for F1=0.85 |
+| `/Users/sai/.claude/plans/vectorized-giggling-frost.md` | Approved plan for the labeler |
+
+## Quick commands
+
+```bash
+# Open the labeler
+python3 gt_labeler.py gt_clips/gt_clip1_morning.mp4
+
+# Re-validate v2 on the original GT clip
+python3 taping_counter.py /tmp/gt_5min.mp4 --version v2 --output /tmp/v2_check.json
+
+# Full-day v2 rerun
+python3 run_full_day.py --ch27-only --ch27-version v2
+
+# Regenerate dashboard
+python3 generate_dashboard.py
+cp blanket_tracker_dashboard.html index.html
+```
+
+## Recent commits (most recent first)
+
+```
+da274d9  Add gt_labeler.py: frame-accurate labeling tool for the CH27 classifier
+69f8ea8  CH27 v3: optical-flow direction-filter plumbing (gate disabled — signal too noisy)
+463fa8c  CH27 v2 full-day shipped: 1,887 cycles (L=1,056 / R=831) over 9 hrs
+f747e3e  CH27 v2: air-zone motion peak detector — F1=0.85 vs v1's F1=0.61
+924028e  CH27 Taping Counter v1: two-table cycle detection with combined activity score
+0496a63  CH19 v6-permissive: aggressive-recall variant
+```

@@ -195,9 +195,17 @@ class GTLabeler:
         # Build UI then load existing sidecar / pre-populate
         self._build_ui()
         self._load_or_prepopulate_labels()
+        # Force-read frame 0 so cv2 internal state is fully initialized before
+        # we attempt seeking. Without this, the first cap.set+read on HEVC
+        # video can return None silently.
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        _ok, _f = self.cap.read()
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         self._render_frame()
         self._refresh_label_list()
         self._update_status()
+        # Grab keyboard focus on the root so arrow keys / A / D fire immediately
+        self.root.after(100, lambda: self.root.focus_force())
 
         # Auto-save loop
         self.root.after(AUTO_SAVE_INTERVAL_MS, self._autosave_tick)
@@ -284,7 +292,10 @@ class GTLabeler:
         status.pack(side=tk.BOTTOM, fill=tk.X, padx=4, pady=2)
 
         # Key bindings (focus root so they fire regardless of widget focus,
-        # except inside the note entry)
+        # except inside the note entry).
+        # Tab is bound via _on_tab_key which returns "break" to suppress Tk's
+        # default focus traversal — without it, the second Tab press moves
+        # widget focus instead of toggling the table.
         for seq, fn in [
             ("<Left>",         lambda e: self._step(-1)),
             ("<Right>",        lambda e: self._step(+1)),
@@ -293,7 +304,10 @@ class GTLabeler:
             ("<Up>",           lambda e: self._step(-int(self.fps * 5))),
             ("<Down>",         lambda e: self._step(+int(self.fps * 5))),
             ("<space>",        lambda e: self._toggle_play()),
-            ("<Tab>",          lambda e: (self._toggle_table(), "break")[1]),
+            ("<Tab>",          self._on_tab_key),
+            ("<Key-Tab>",      self._on_tab_key),
+            ("<KeyPress-t>",   lambda e: self._toggle_table()),  # T as alt for Tab
+            ("<KeyPress-T>",   lambda e: self._toggle_table()),
             ("<KeyPress-a>",   lambda e: self._mark_event("load")),
             ("<KeyPress-A>",   lambda e: self._mark_event("load")),
             ("<KeyPress-d>",   lambda e: self._mark_event("toss")),
@@ -313,9 +327,20 @@ class GTLabeler:
         ]:
             self.root.bind(seq, fn)
 
+        # Also bind Tab on every widget that could steal focus, returning "break"
+        # so Tk doesn't run its own focus traversal handler.
+        for w in (self.canvas, self.listbox, self.slider):
+            w.bind("<Tab>", self._on_tab_key)
+            w.bind("<Key-Tab>", self._on_tab_key)
+
         # Don't intercept arrows when focus is in the note entry
         self.note_entry.bind("<Left>", lambda e: None)
         self.note_entry.bind("<Right>", lambda e: None)
+
+    def _on_tab_key(self, _event):
+        """Handle Tab: toggle table + suppress Tk's default focus traversal."""
+        self._toggle_table()
+        return "break"
 
     # ── Pre-populate / load ──────────────────────────────────────
 
@@ -343,9 +368,22 @@ class GTLabeler:
     # ── Frame rendering ──────────────────────────────────────────
 
     def _render_frame(self):
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
+        # On the FIRST render, just read sequentially (cv2 seek + HEVC sometimes
+        # returns junk on the very first cap.read() after instantiation).
+        # On subsequent renders, only seek if we're not already at the right frame.
+        cur_pos = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if cur_pos != self.frame_idx:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
         ret, frame = self.cap.read()
-        if not ret:
+        if not ret or frame is None:
+            # Show an error placeholder rather than silently leaving the canvas blank
+            self.canvas.delete("all")
+            self.canvas.create_rectangle(0, 0, DISPLAY_W, DISPLAY_H, fill="#1f2937", outline="")
+            self.canvas.create_text(DISPLAY_W // 2, DISPLAY_H // 2,
+                                     text=f"⚠ Frame {self.frame_idx} could not be read\n"
+                                          f"(cv2.read() returned None)\n"
+                                          f"Try arrow keys to advance",
+                                     fill="#fbbf24", font=("Helvetica", 14), justify=tk.CENTER)
             return
         # Convert BGR → RGB and resize for display
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
