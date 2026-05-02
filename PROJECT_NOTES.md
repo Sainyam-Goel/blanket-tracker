@@ -305,6 +305,79 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ---
 
+## CH27 Taping Counter (v1, May 2026)
+
+New camera added to track the taping workstation: workers tape both ends of a
+folded blanket on one of TWO independent tables, then toss to a central heap.
+
+**Architecture:** `taping_counter.py` — `TapingCounter` class with two
+`_TableTracker` instances (one per table). Both run on the same video pass.
+
+**Detection signal** — combined activity score per ROI per frame:
+```
+activity = max(0, mean_baseline - mean_smoothed)   ← dark blanket darkens table
+         + max(0, std_smoothed  - std_baseline)    ← patterned blanket adds variance
+```
+Both terms clipped at 0 so empty frames score ~0. Insight from sample debugging:
+**std alone fails for plain dark blankets** spread flat (they REDUCE std vs the
+heterogeneous floor/edges). Mean intensity catches them. Patterned blankets do the
+opposite. The combined score handles both.
+
+**Baselines** — rolling percentiles of recent raw values (recomputed every 10
+frames for speed): `mean_baseline` = 80th pct (empty table is bright tan),
+`std_baseline` = 20th pct (empty / uniform fabric is low-std).
+
+**Hysteresis state machine** with dead zone:
+- ON: activity > 4 sustained 0.32s + peak ≥ 6 (STRONG gate rejects worker-only blips)
+- OFF: activity < 2 sustained 1.2s
+- Cycle-duration gates: < 4s → too_short (drop), > 60s → long_cycle (flag), > 180s → stuck (drop + recalibrate)
+
+**Overlap detector** — runs in parallel during loaded state. After MIN_CYCLE_SEC
+elapsed, watches for a downward spike (drop_delta=2.5 over 0.5s) followed within
+1.5s by an upward spike. When fired, emits cycle at the trough and resets cycle
+start to recovery point WITHOUT leaving loaded. Catches the back-to-back tossing
+pattern on RIGHT (~10s cycles, 0.3-1s empty between).
+
+**Warmup-loaded snap** — if activity is already elevated when warmup completes,
+snap to loaded state so the first toss event is still detectable when recording
+starts mid-cycle.
+
+**Performance optimization:** `frame_step=2` halves HEVC decode time using
+`cv2.cap.grab()` between processed frames; cycle detection is time-based so
+behavior is preserved.
+
+### Manual ground truth (sample 2.mp4, 90s, 12 GT toss events)
+| Table | GT tosses | Detected (default config) |
+|-------|----------:|--------------------------:|
+| LEFT  | 3 (at 6, 47, 78s) | 7 (over-counts long cycles via overlap detector splits) |
+| RIGHT | 9 (at 8, 19, 30, 43, 54, 63, 71, 79, 89s) | 7 (under: misses GT 89, merges 54+63 via overlap) |
+
+### Full-day results (8.99 hrs, 28 Apr 2026, 09:00–19:00, 9 NVR segments)
+| Metric | Value |
+|---|---|
+| Total cycles | 2,557 |
+| LEFT cycles | 1,090 (121/hr) |
+| RIGHT cycles | 1,467 (163/hr) |
+| Mean cycle | 15.4s, Median 9.3s |
+| Balance ratio | 0.74 (LEFT/RIGHT) |
+| Via overlap detector | 2,276 (89%) |
+| Long cycles (>60s) | 81 |
+| Suppressed | 142 (mostly weak_peak) |
+| Processing | 10.4 hrs at frame_step=2 (≈0.86x realtime) |
+
+### Known v1 limitations
+- LEFT over-counts when the worker pauses mid-cycle (long cycles split).
+- RIGHT under-counts when back-to-back tosses are very rapid (<0.3s gap).
+- Default config trades precision for recall; tighten thresholds to favor precision.
+- No spatial / motion features yet — would help for v2 (tape dispenser, hand position).
+
+### CH27 ROIs (1920×1080, refine via `taping_roi_calibrator.py`)
+- LEFT_TABLE_ROI  = (60, 700, 580, 1000)
+- RIGHT_TABLE_ROI = (1280, 700, 1860, 1000)
+- HEAP_ROI        = (700, 350, 1220, 750) — validation only, sampled every 60 frames
+
+---
+
 ## CH19 Cutting Counter
 
 ### v6-permissive (aggressive-recall variant, April 2026)

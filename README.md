@@ -8,12 +8,13 @@ Computer vision system for counting blankets on a factory production floor using
 
 Built for a blanket factory in Panipat, Haryana. The system processes 1920x1080 @ 25fps NVR recordings and produces a self-contained HTML dashboard with production analytics.
 
-### Two-Camera Pipeline
+### Three-Camera Pipeline
 
 | Camera | Station | What It Counts | Method |
 |--------|---------|----------------|--------|
 | **CH19** | Cutting Table | Blanket cuts (pieces sliding off table) | Multi-scale brightness derivative detection |
 | **CH21** | Passing Station | Accepted + rejected blankets | Scale reference-frame comparison + table texture |
+| **CH27** | Taping Station | Cycles per table (LEFT + RIGHT) | Combined mean+std activity score with hysteresis + overlap detector |
 
 ## Results
 
@@ -69,8 +70,10 @@ Tracks blankets through the weighing scale chokepoint:
 
 | File | Description |
 |------|-------------|
-| `cutting_counter.py` | CH19 cutting counter v5 (~700 lines) |
+| `cutting_counter.py` | CH19 cutting counter v5/v6 (~700 lines) |
 | `blanket_counter.py` | CH21 passing counter v4 (~830 lines) |
+| `taping_counter.py`  | CH27 taping counter v1 (two parallel state machines) |
+| `taping_roi_calibrator.py` | Overlay ROI rectangles on a sample frame for tuning |
 | `generate_dashboard.py` | Reads both JSON outputs, generates dashboard HTML |
 | `run_full_day.py` | Batch processor for multi-segment NVR recordings |
 | `blanket_tracker_dashboard.html` | Self-contained dual-camera dashboard (~2.5MB) |
@@ -96,13 +99,21 @@ python3 cutting_counter.py /path/to/ch19_video.mp4 --output cutting_results.json
 python3 blanket_counter.py /path/to/ch21_video.mp4 --output blanket_results.json
 ```
 
-**Process full day of NVR recordings (both cameras in parallel):**
+**Process full day of NVR recordings (all three cameras):**
 ```bash
-python3 run_full_day.py                  # Both cameras
+python3 run_full_day.py                  # All cameras
 python3 run_full_day.py --ch19-only      # Cutting only
 python3 run_full_day.py --ch21-only      # Passing only
+python3 run_full_day.py --ch27-only      # Taping only
 ```
-Place NVR files in `frames/New Long video data/Cutting/` and `frames/New Long video data/Passing/`.
+Place NVR files in `frames/New Long video data/Cutting/`, `frames/New Long video data/Passing/`,
+and `Taping Cam27/` (CH27 supports nested subdirectories — `Tape/`, `Tape 2/`, etc).
+
+**Count taping cycles from a single CH27 video:**
+```bash
+python3 taping_counter.py /path/to/ch27_video.mp4 --output taping_results.json
+python3 taping_counter.py /path/to/ch27_video.mp4 --frame-step 2  # halve HEVC decode time
+```
 
 **Generate dashboard:**
 ```bash

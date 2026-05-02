@@ -9,6 +9,7 @@ from datetime import datetime
 CH19_JSON = "cutting_fullday.json"
 CH19_V6_JSON = "cutting_fullday_v6.json"   # optional v6-permissive variant
 CH21_JSON = "blanket_fullday.json"
+CH27_JSON = "taping_fullday.json"
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 
 
@@ -118,6 +119,30 @@ def load_and_compact():
             "frames": ch21_all_frames,
         },
     }
+
+    # Optional CH27 taping camera
+    if os.path.exists(CH27_JSON):
+        try:
+            with open(CH27_JSON) as f:
+                ch27 = json.load(f)
+            # Sample frame_data down so payload stays manageable
+            ch27_fd = ch27.get("frame_data", [])
+            ch27_step = max(1, len(ch27_fd) // 1800)
+            dashboard_data["ch27"] = {
+                "metadata": ch27.get("metadata", {}),
+                "summary": ch27.get("summary", {}),
+                "segments": ch27.get("segments", []),
+                "events": ch27.get("events", []),
+                "breaks": ch27.get("breaks", []),
+                "suppressed_count": ch27.get("summary", {}).get("suppressed_count", 0),
+                "frame_data": ch27_fd[::ch27_step],
+                "heap_trace": ch27.get("heap_trace", []),
+            }
+            print(f"  Loaded CH27: {ch27['summary']['total_cycles']} cycles "
+                  f"(L={ch27['summary']['left_cycles']}, R={ch27['summary']['right_cycles']})")
+        except Exception as ex:
+            print(f"  WARN: failed to load {CH27_JSON}: {ex}")
+
     return dashboard_data
 
 
@@ -602,6 +627,48 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- CH27 Taping panel (rendered if taping_fullday.json present) -->
+  <div id="ch27-section" style="display:none">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">CH27 — Taping</span>
+        <span class="panel-tag tag-combined" id="ch27-tag">--</span>
+      </div>
+      <div class="panel-body">
+        <div class="kpi-row">
+          <div class="kpi-card amber">
+            <div class="kpi-label">Total Cycles</div>
+            <div class="kpi-value" id="kpi-ch27-total">0</div>
+            <div class="kpi-sub">blankets taped</div>
+          </div>
+          <div class="kpi-card green">
+            <div class="kpi-label">LEFT Table</div>
+            <div class="kpi-value" id="kpi-ch27-left" style="color:var(--accent3)">0</div>
+            <div class="kpi-sub" id="kpi-ch27-left-sub">cycles</div>
+          </div>
+          <div class="kpi-card blue">
+            <div class="kpi-label">RIGHT Table</div>
+            <div class="kpi-value" id="kpi-ch27-right" style="color:var(--ch21)">0</div>
+            <div class="kpi-sub" id="kpi-ch27-right-sub">cycles</div>
+          </div>
+          <div class="kpi-card purple">
+            <div class="kpi-label">Median Cycle</div>
+            <div class="kpi-value" id="kpi-ch27-median">0</div>
+            <div class="kpi-sub">seconds per blanket</div>
+          </div>
+        </div>
+        <div style="margin-top: 16px;">
+          <div class="chart-area" style="height:240px"><canvas id="chart-ch27-timeline"></canvas></div>
+        </div>
+        <div style="margin-top: 12px; font-size: 12px; color:#9ca3af; line-height:1.6;">
+          Cumulative cycles per table over the day. CH27 v1 uses combined mean+std activity
+          score per ROI with hysteresis state machine + back-to-back cycle (overlap) detector.
+          <span id="ch27-extra"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Hourly Stats Table -->
   <div class="panel">
     <div class="panel-header">
@@ -812,6 +879,95 @@ document.getElementById('ch21-duration-label').textContent =
 
 document.getElementById('timeline-tag').textContent =
   ch19Cuts + ' cuts + ' + ch21Total + ' blankets';
+
+// ── CH27 Taping panel ─────────────────────────────────────────
+const ch27 = D.ch27;
+if (ch27) {
+  const sec = document.getElementById('ch27-section');
+  if (sec) {
+    sec.style.display = 'block';
+    const s = ch27.summary || {};
+    animateCount(document.getElementById('kpi-ch27-total'), s.total_cycles || 0);
+    animateCount(document.getElementById('kpi-ch27-left'),  s.left_cycles  || 0);
+    animateCount(document.getElementById('kpi-ch27-right'), s.right_cycles || 0);
+    animateCount(document.getElementById('kpi-ch27-median'), Math.round(s.median_cycle_sec || 0));
+    const dur = (ch27.metadata && ch27.metadata.duration_sec) || 0;
+    document.getElementById('ch27-tag').textContent = fmtDur(dur) + ' analyzed';
+    document.getElementById('kpi-ch27-left-sub').textContent =
+      'cycles · ' + ((s.left_cycles || 0) / Math.max(1, dur/3600)).toFixed(0) + '/hr';
+    document.getElementById('kpi-ch27-right-sub').textContent =
+      'cycles · ' + ((s.right_cycles || 0) / Math.max(1, dur/3600)).toFixed(0) + '/hr';
+    const extra = [
+      'mean ' + (s.mean_cycle_sec||0).toFixed(1) + 's',
+      'balance ' + (s.table_balance_ratio||0).toFixed(2),
+      (s.overlap_cycles||0) + ' via overlap detector',
+      (s.long_cycles||0) + ' long cycles (>60s)',
+      (s.suppressed_count||0) + ' suppressed (audit)',
+    ].join(' · ');
+    document.getElementById('ch27-extra').textContent = '· ' + extra;
+
+    // Cumulative-cycles timeline (left/right)
+    const cv = document.getElementById('chart-ch27-timeline');
+    if (cv && ch27.events && ch27.events.length) {
+      // Build cumulative L and R series
+      const evts = ch27.events.slice().sort((a,b)=>a.time_sec-b.time_sec);
+      const lPts = [{t:0,v:0}], rPts = [{t:0,v:0}];
+      let lc=0, rc=0;
+      for (const e of evts) {
+        if (e.table === 'left')  { lc++; lPts.push({t:e.time_sec, v:lc}); }
+        if (e.table === 'right') { rc++; rPts.push({t:e.time_sec, v:rc}); }
+      }
+      const tMax = (ch27.metadata && ch27.metadata.duration_sec) || (evts[evts.length-1].time_sec);
+      lPts.push({t:tMax, v:lc}); rPts.push({t:tMax, v:rc});
+      drawCh27Chart(cv, lPts, rPts, tMax, Math.max(lc, rc));
+    }
+  }
+}
+
+function drawCh27Chart(canvas, lPts, rPts, tMax, vMax) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const m = {l: 50, r: 14, t: 18, b: 28};
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  // Background
+  ctx.fillStyle = '#0e1116'; ctx.fillRect(0,0,W,H);
+  // Axes + grid
+  ctx.strokeStyle = '#1f242c'; ctx.lineWidth = 1;
+  ctx.font = '11px JetBrains Mono, monospace'; ctx.fillStyle = '#6b7280';
+  for (let i=0; i<=4; i++) {
+    const y = m.t + (ph * i / 4);
+    ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(m.l + pw, y); ctx.stroke();
+    ctx.fillText(Math.round(vMax * (1 - i/4)).toString(), 8, y + 3);
+  }
+  for (let i=0; i<=6; i++) {
+    const x = m.l + (pw * i / 6);
+    const tHr = (tMax/3600) * (i/6);
+    ctx.fillText(tHr.toFixed(1) + 'h', x - 12, H - 8);
+  }
+  // Plot helper
+  function plot(pts, color) {
+    if (!pts.length) return;
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = m.l + (p.t / Math.max(1, tMax)) * pw;
+      const y = m.t + (1 - p.v / Math.max(1, vMax)) * ph;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  plot(lPts, '#34d399');  // green for LEFT
+  plot(rPts, '#3b82f6');  // blue for RIGHT
+  // Legend
+  ctx.font = '12px Syne, sans-serif';
+  ctx.fillStyle = '#34d399'; ctx.fillRect(m.l + 6, m.t + 6, 12, 3); ctx.fillText('LEFT',  m.l + 24, m.t + 12);
+  ctx.fillStyle = '#3b82f6'; ctx.fillRect(m.l + 80, m.t + 6, 12, 3); ctx.fillText('RIGHT', m.l + 98, m.t + 12);
+}
 
 document.getElementById('footer-generated').textContent =
   'Generated ' + D.generated_at.replace('T', ' ').split('.')[0];

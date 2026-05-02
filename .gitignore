@@ -7,6 +7,9 @@ cutting_test.json
 blanket_count_1hr.json
 test_short.json
 cutting_v6_gt.json
+taping_test_*.json
+taping_sample*.json
+Taping Cam27/
 
 # Frames and video data
 frames/
