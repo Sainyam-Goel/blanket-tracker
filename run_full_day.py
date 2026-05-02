@@ -27,7 +27,8 @@ TAPING_DIR  = BASE / "Taping Cam27"   # NVR files are in subdirs (Tape/, Tape 2/
 CH19_OUTPUT = BASE / "cutting_fullday.json"
 CH19_OUTPUT_V6 = BASE / "cutting_fullday_v6.json"
 CH21_OUTPUT = BASE / "blanket_fullday.json"
-CH27_OUTPUT = BASE / "taping_fullday.json"
+CH27_OUTPUT = BASE / "taping_fullday.json"        # primary (v2 by default)
+CH27_OUTPUT_V1 = BASE / "taping_fullday_v1.json"  # legacy v1 for comparison
 
 
 def sorted_videos(directory, recursive=False):
@@ -280,10 +281,11 @@ def run_ch21(videos):
     return merged
 
 
-def run_ch27(videos, frame_step=2):
+def run_ch27(videos, frame_step=1, version="v2"):
     """Process all CH27 taping videos sequentially, merge with time offsets.
-    ``frame_step=2`` halves HEVC decode time at the cost of 12.5fps effective
-    rate (still plenty for 5–60s cycle detection).
+    ``frame_step`` advances raw frames N at a time (HEVC decode optimization).
+    v2 algorithm requires consecutive frames for air-motion frame-difference,
+    so frame_step=1 is the safe default. v1 tolerates frame_step=2.
     """
     sys.path.insert(0, str(BASE))
     from taping_counter import TapingCounter
@@ -304,7 +306,7 @@ def run_ch27(videos, frame_step=2):
         print(f"  Time offset: {total_duration:.1f}s ({total_duration/60:.1f} min)")
         print(f"{'='*70}")
 
-        counter = TapingCounter(video, frame_step=frame_step)
+        counter = TapingCounter(video, frame_step=frame_step, version=version)
         results = counter.run()
 
         seg_duration = results["metadata"]["duration_sec"]
@@ -464,7 +466,14 @@ def main():
     elif "--ch21-only" in sys.argv:
         ch21_result = run_ch21(ch21_videos)
     elif "--ch27-only" in sys.argv:
-        ch27_result = run_ch27(ch27_videos)
+        # CH27 supports its own version flag (v1=combined activity, v2=air motion).
+        # Default to v2 (precision-tuned via 5-min GT clip).
+        ch27_version = "v2"
+        if "--ch27-version" in sys.argv:
+            idx = sys.argv.index("--ch27-version")
+            if idx + 1 < len(sys.argv):
+                ch27_version = sys.argv[idx + 1]
+        ch27_result = run_ch27(ch27_videos, version=ch27_version)
     else:
         # Sequential all (run in separate terminals for parallel)
         if ch19_videos:
@@ -472,7 +481,7 @@ def main():
         if ch21_videos:
             ch21_result = run_ch21(ch21_videos)
         if ch27_videos:
-            ch27_result = run_ch27(ch27_videos)
+            ch27_result = run_ch27(ch27_videos, version="v2")
 
     # Save results
     if ch19_result:
@@ -490,8 +499,11 @@ def main():
               f"{ch21_result['metadata']['duration_sec']/3600:.1f} hrs")
 
     if ch27_result:
-        CH27_OUTPUT.write_text(json.dumps(ch27_result, indent=2))
-        print(f"\nCH27 saved to: {CH27_OUTPUT}")
+        # Route v1 to its own file so v2 (default) doesn't clobber it
+        ver = ch27_result.get("metadata", {}).get("version", "v2")
+        out_path = CH27_OUTPUT_V1 if ver == "v1" else CH27_OUTPUT
+        out_path.write_text(json.dumps(ch27_result, indent=2))
+        print(f"\nCH27 saved to: {out_path}  (variant: {ver})")
         print(f"  {ch27_result['summary']['total_cycles']} cycles "
               f"(L={ch27_result['summary']['left_cycles']}, "
               f"R={ch27_result['summary']['right_cycles']}) over "

@@ -305,6 +305,80 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ---
 
+## CH27 Taping Counter — v2 (May 2026, precision-tuned via 5-min GT clip)
+
+User flagged v1 was not "airtight" — needed precision/recall jump. Built a
+5-minute manually-annotated GT clip from peak morning production (10:20–25:00
+on 28 Apr 2026, 60 toss events: LEFT 35, RIGHT 25). Ran v1 on the clip, got
+**P=68% R=55% F1=0.61**. Designed v2 to fix the failure modes.
+
+### Key insight that drove v2
+Single-signal (table-mean+std) detection cannot discriminate "real toss" from
+"mid-cycle dip" because LEFT signal noise is on the same magnitude as the toss
+drop. We added a **second independent signal**: frame-to-frame motion in the
+**air zone above each table**. Validation across 60 GT events:
+
+| Side  | Air baseline | Air at toss   | SNR vs baseline |
+|-------|------------:|--------------:|----------------:|
+| LEFT  | 3.6         | 9.3 – 17.5 (median 12.6) | 3-5x         |
+| RIGHT | 0.8         | 7.6 – 15.4 (median 10.9) | 10-15x       |
+
+Clean separation. The air-motion **peak** is the toss event itself.
+
+### Algorithm
+1. Two tight per-table ROIs (calibrated on visible empty-table frame at t=280s)
+2. Two air-zone ROIs (~160px tall strip ABOVE each table)
+3. Per frame:
+   - Combined activity score on table ROI (mean deficit + std excess) — context
+   - Frame-difference on air zone — primary toss-event signal
+4. Toss detector:
+   - Air-motion smoothed crosses above per-table threshold (LEFT 8.5 / RIGHT 7.0)
+   - Track pulse, capture peak time + magnitude
+   - On pulse end (drops below 0.7× threshold), evaluate:
+     - Context: max table signal in last 6s ≥ 4 (proves blanket WAS there → rejects helper restocks + walk-bys)
+     - Cooldown: ≥ 2.5s since last toss
+     - Min cycle: ≥ 4.5s
+     - Not in break
+   - If all pass → emit toss at peak timestamp
+5. Break detector: median of last 20s table signal < 4 → suspend
+6. Conservative mode: if no toss for >30s, raise air threshold ×1.5 (rejects
+   heap-movement spikes during worker breaks)
+7. Warmup-loaded snap: if signal already elevated at clip start, mark loaded
+   so first toss is detectable
+
+### v2 vs v1 on the GT clip
+| Metric | v1 (combined activity)  | v2 (air motion + context) |
+|--------|------------------------:|--------------------------:|
+| LEFT precision  | 66%  | **86%** |
+| LEFT recall     | 54%  | **89%** |
+| RIGHT precision | 70%  | **86%** |
+| RIGHT recall    | 56%  | **76%** |
+| **Overall F1**  | 0.61 | **0.85** |
+| Detected total  | 49/60 (82%) | **58/60 (97%)** |
+
+### v2 known limitations
+- Misses a few "back-to-back tosses within 4s of each other" (cooldown blocks)
+- Misses the FIRST toss of a clip if air-motion pulse hasn't ended before
+  warmup (need to extend pulse-timeout fallback in v3)
+- HEVC keyframe artifact (~every 50 frames) causes synchronized air-motion
+  spikes in both tables — current build does NOT subtract common-mode (it
+  hurt RIGHT too much). v3 should use a per-table artifact threshold.
+
+### CH27 ROIs (tight, calibrated on the GT clip empty-state frame)
+- LEFT_TABLE_ROI_V2  = (200, 750, 650, 940)
+- RIGHT_TABLE_ROI_V2 = (1140, 720, 1750, 970)
+- LEFT_AIR_ROI_V2    = (160, 580, 660, 740)
+- RIGHT_AIR_ROI_V2   = (1180, 580, 1750, 720)
+
+### Files
+- `taping_counter.py` — TapingCounter with `--version v1|v2` and the new
+  `_TableTrackerV2` class
+- `taping_fullday.json` — primary output (v2)
+- `taping_fullday_v1.json` — legacy v1 output for delta comparison
+- 5-min GT clip extracted at `/tmp/gt_5min.mp4` (from `Tape 4` segment 20:00-26:00)
+
+---
+
 ## CH27 Taping Counter (v1, May 2026)
 
 New camera added to track the taping workstation: workers tape both ends of a

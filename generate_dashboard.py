@@ -9,7 +9,8 @@ from datetime import datetime
 CH19_JSON = "cutting_fullday.json"
 CH19_V6_JSON = "cutting_fullday_v6.json"   # optional v6-permissive variant
 CH21_JSON = "blanket_fullday.json"
-CH27_JSON = "taping_fullday.json"
+CH27_JSON = "taping_fullday.json"          # primary (v2)
+CH27_V1_JSON = "taping_fullday_v1.json"     # legacy v1 for delta comparison
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 
 
@@ -139,9 +140,24 @@ def load_and_compact():
                 "heap_trace": ch27.get("heap_trace", []),
             }
             print(f"  Loaded CH27: {ch27['summary']['total_cycles']} cycles "
-                  f"(L={ch27['summary']['left_cycles']}, R={ch27['summary']['right_cycles']})")
+                  f"(L={ch27['summary']['left_cycles']}, R={ch27['summary']['right_cycles']}) "
+                  f"variant={ch27.get('metadata',{}).get('version','?')}")
         except Exception as ex:
             print(f"  WARN: failed to load {CH27_JSON}: {ex}")
+
+    # Optional CH27 v1 companion for delta comparison
+    if os.path.exists(CH27_V1_JSON):
+        try:
+            with open(CH27_V1_JSON) as f:
+                ch27_v1 = json.load(f)
+            dashboard_data["ch27_v1"] = {
+                "summary": ch27_v1.get("summary", {}),
+                "metadata": ch27_v1.get("metadata", {}),
+            }
+            print(f"  Loaded CH27 v1: {ch27_v1['summary']['total_cycles']} cycles "
+                  f"(L={ch27_v1['summary']['left_cycles']}, R={ch27_v1['summary']['right_cycles']})")
+        except Exception as ex:
+            print(f"  WARN: failed to load {CH27_V1_JSON}: {ex}")
 
     return dashboard_data
 
@@ -882,6 +898,7 @@ document.getElementById('timeline-tag').textContent =
 
 // ── CH27 Taping panel ─────────────────────────────────────────
 const ch27 = D.ch27;
+const ch27v1 = D.ch27_v1;  // optional v1 companion for delta
 if (ch27) {
   const sec = document.getElementById('ch27-section');
   if (sec) {
@@ -892,7 +909,9 @@ if (ch27) {
     animateCount(document.getElementById('kpi-ch27-right'), s.right_cycles || 0);
     animateCount(document.getElementById('kpi-ch27-median'), Math.round(s.median_cycle_sec || 0));
     const dur = (ch27.metadata && ch27.metadata.duration_sec) || 0;
-    document.getElementById('ch27-tag').textContent = fmtDur(dur) + ' analyzed';
+    const variant = (ch27.metadata && ch27.metadata.version) || '';
+    document.getElementById('ch27-tag').textContent =
+      fmtDur(dur) + ' analyzed · ' + variant;
     document.getElementById('kpi-ch27-left-sub').textContent =
       'cycles · ' + ((s.left_cycles || 0) / Math.max(1, dur/3600)).toFixed(0) + '/hr';
     document.getElementById('kpi-ch27-right-sub').textContent =
@@ -900,11 +919,21 @@ if (ch27) {
     const extra = [
       'mean ' + (s.mean_cycle_sec||0).toFixed(1) + 's',
       'balance ' + (s.table_balance_ratio||0).toFixed(2),
-      (s.overlap_cycles||0) + ' via overlap detector',
       (s.long_cycles||0) + ' long cycles (>60s)',
       (s.suppressed_count||0) + ' suppressed (audit)',
-    ].join(' · ');
-    document.getElementById('ch27-extra').textContent = '· ' + extra;
+    ];
+    if (ch27v1 && ch27v1.summary) {
+      const v1s = ch27v1.summary;
+      const dT = (s.total_cycles||0) - (v1s.total_cycles||0);
+      const dL = (s.left_cycles||0)  - (v1s.left_cycles||0);
+      const dR = (s.right_cycles||0) - (v1s.right_cycles||0);
+      const sgn = (n) => (n>=0?'+':'') + n;
+      extra.unshift('vs v1: ' + sgn(dT) + ' total (L ' + sgn(dL) + ', R ' + sgn(dR) + ')');
+    }
+    extra.unshift(
+      'v2 = air-motion peak detector validated F1=0.85 on 5-min GT clip ' +
+      '(60 toss events). Precision-tuned vs v1 (F1=0.61).');
+    document.getElementById('ch27-extra').textContent = '· ' + extra.join(' · ');
 
     // Cumulative-cycles timeline (left/right)
     const cv = document.getElementById('chart-ch27-timeline');

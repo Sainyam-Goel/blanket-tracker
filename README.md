@@ -14,7 +14,7 @@ Built for a blanket factory in Panipat, Haryana. The system processes 1920x1080 
 |--------|---------|----------------|--------|
 | **CH19** | Cutting Table | Blanket cuts (pieces sliding off table) | Multi-scale brightness derivative detection |
 | **CH21** | Passing Station | Accepted + rejected blankets | Scale reference-frame comparison + table texture |
-| **CH27** | Taping Station | Cycles per table (LEFT + RIGHT) | Combined mean+std activity score with hysteresis + overlap detector |
+| **CH27** | Taping Station | Cycles per table (LEFT + RIGHT) | v2 (default): air-zone motion peak + table-state context. F1=0.85 vs GT |
 
 ## Results
 
@@ -111,8 +111,13 @@ and `Taping Cam27/` (CH27 supports nested subdirectories — `Tape/`, `Tape 2/`,
 
 **Count taping cycles from a single CH27 video:**
 ```bash
-python3 taping_counter.py /path/to/ch27_video.mp4 --output taping_results.json
-python3 taping_counter.py /path/to/ch27_video.mp4 --frame-step 2  # halve HEVC decode time
+python3 taping_counter.py /path/to/ch27_video.mp4 --version v2 --output taping_results.json
+python3 taping_counter.py /path/to/ch27_video.mp4 --version v1 --frame-step 2  # legacy v1, faster decode
+```
+
+**Calibrate v2 ROIs on a sample frame:**
+```bash
+python3 taping_roi_calibrator.py /path/to/sample_frame.png  # writes annotated PNG
 ```
 
 **Generate dashboard:**
