@@ -441,13 +441,69 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ---
 
-## CH27 GT Labeling Tool (`gt_labeler.py`, May 2026)
+## CH27 GT Labeling Tools (`gt_labeler.py` Tk + `gt_labeler_web.py` browser, May 2026)
 
 After v3's optical-flow plumbing failed to push F1 past 0.85 (signal too noisy
 in the air zone — worker arm follow-through dominates), the bottleneck became
-**how much labeled data we have**, not algorithm tuning. Built a frame-accurate
-Tkinter labeler so we can collect 150–250 events from 3 diverse 5-min clips
-and train a pulse-shape classifier (CH27 v4).
+**how much labeled data we have**, not algorithm tuning. We built TWO
+interchangeable labelers, both writing the same sidecar JSON schema.
+
+### Why two labelers
+- **`gt_labeler.py`** is the original Tkinter desktop app I wrote first. It
+  works on most macOS builds, but on some Tk + Pillow versions it creates a
+  valid image widget but paints the canvas blank — a known PIL/Tk quirk on
+  certain macOS releases.
+- **`gt_labeler_web.py`** was built by the user when they hit that paint bug.
+  It runs a tiny `ThreadingHTTPServer` on localhost and uses the browser's
+  native `<video>` element + JS for the UI. Works on every OS / browser.
+  This is the labeler that produced all 5 clips of GT used to date.
+
+Both labelers:
+- Use the same v2 ROIs (imported from `taping_counter`) for the on-canvas
+  overlay so labelers stay consistent
+- Pre-populate suggested toss events from v2 (cached to
+  `<clip>.v2_detections.json`)
+- Write `<clip>.labels.json` with identical schema (see
+  `gt_clips/MEMORY.md` for the labeling convention: A=load, D=toss,
+  multiple adjacent frames per physical action, cluster ≤1s gap)
+- Persist the same fields per label: `frame, time_sec, table, type, note,
+  source, confirmed`
+
+### Convention from `gt_clips/MEMORY.md`
+- `A` (load) → marks the lower **table** ROI for the active table
+- `D` (toss) → marks the upper **air** ROI for the active table
+- The labeler shows the table ROI in a darker color and the air ROI in a
+  lighter color to remind the labeler which physical area the keys map to
+- Multiple adjacent frames may be marked for one physical action; training
+  code MUST cluster (≤1s gap → same action) before treating them as
+  independent events. `cluster_labels()` in `train_taping_classifier.py`
+  does this.
+
+### Browser labeler (`gt_labeler_web.py`) — quick reference
+```bash
+python3 gt_labeler_web.py gt_clips/gt_clip1_morning.mp4 [--port 8769]
+```
+- Opens default browser to `http://localhost:<port>` automatically
+- Save with **Cmd+S** or the Save button (also auto-saves every 30 s)
+- Sidecar JSON written next to the video on save
+- Reuses helper functions from `gt_labeler.py` (`get_v2_detections`,
+  `load_sidecar`, `save_sidecar`, `sidecar_path`) for v2 pre-population +
+  resume
+
+### Tk labeler (`gt_labeler.py`) — same keys, alternative if browser flow fails
+```bash
+python3 gt_labeler.py gt_clips/gt_clip1_morning.mp4
+```
+
+### Files in this stack
+- `gt_labeler_web.py` — browser-based labeler (~673 LOC, ships HTML/JS inline)
+- `gt_labeler.py` — Tkinter labeler (~600 LOC)
+- `gt_clips/MEMORY.md` — labeling convention + clip catalogue (user-authored)
+- `gt_clips/*.labels.json` — TRACKED in git (the actual GT)
+- `gt_clips/*.v2_detections.json` — gitignored (regenerable cache)
+- `gt_clips/*.mp4` — gitignored (too big)
+
+### History before the labelers (for context)
 
 ### Key design points
 - **Pre-population** from v2 (cached to `<video>.v2_detections.json` so the

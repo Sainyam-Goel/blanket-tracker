@@ -122,27 +122,41 @@ python3 taping_counter.py /path/to/ch27_video.mp4 --version v1 --frame-step 2  #
 python3 taping_roi_calibrator.py /path/to/sample_frame.png  # writes annotated PNG
 ```
 
-**Label ground truth for the classifier:**
-```bash
-python3 gt_labeler_web.py path/to/clip.mp4
-```
-Frame-accurate labeling tool. Pre-populates suggested toss events from the v2
-algorithm; you confirm/edit/delete and add missed events. Output: sidecar
-`<clip>.labels.json` next to the video.
+**Label ground truth for the classifier (two interchangeable labelers):**
 
-Keyboard: ←/→ step ±1 frame · Shift+←/→ step ±1 s · Space play · Tab
-or T toggle active table (LEFT↔RIGHT) · **A** mark load in the lower table ROI
-· **D** mark toss through the upper air ROI ·
-Enter edit note · Backspace delete · Cmd+S save · Cmd+Z undo · R toggle ROI
-overlay · ? help.
+```bash
+# RECOMMENDED — browser-based (uses native HTML5 video, works on any OS)
+python3 gt_labeler_web.py gt_clips/gt_clip1_morning.mp4
+# Open the printed local URL in Chrome.
+
+# Alternative — Tkinter desktop labeler (legacy; some macOS Tk builds paint
+# the image area blank, in which case use the web version)
+python3 gt_labeler.py gt_clips/gt_clip1_morning.mp4
+```
+
+Both write the SAME sidecar JSON schema: `<clip>.labels.json` next to the
+video. Both pre-populate suggested toss events from the v2 detector (cached
+to `<clip>.v2_detections.json`). Both use the same v2 ROIs from
+`taping_counter.py` for the on-canvas overlay so labels are consistent.
+
+Keyboard (both labelers): ←/→ step ±1 frame · Shift+←/→ step ±1 s · Space
+play · Tab (or T) toggle active table (LEFT↔RIGHT) · **A** mark load in the
+lower table ROI · **D** mark toss through the upper air ROI · Enter edit
+note · Backspace delete · Cmd+S save · Cmd+Z undo · R toggle ROI overlay ·
+? help.
 
 Pre-extracted 5-min training clips live in `gt_clips/`:
-- `gt_clip1_morning.mp4`   (10:35 wall clock — peak production)
-- `gt_clip2_prelunch.mp4`  (12:25 — slowdown into lunch)
-- `gt_clip3_postlunch.mp4` (14:15 — post-lunch ramp-up)
+- `gt_clip1_morning.mp4`        (10:35 wall clock — peak production)
+- `gt_clip2_prelunch.mp4`       (12:25 — slowdown into lunch)
+- `gt_clip3_postlunch.mp4`      (14:15 — post-lunch ramp-up)
+- `gt_clip4_afternoon_dark.mp4` (15:30 — afternoon, darker SKU mix)
+- `gt_clip5_endofday.mp4`       (18:45 — end-of-day slow pace)
 
-Label all three (~30 min each) and the resulting `*.labels.json` files feed
-the classifier-training script (planned `train_taping_classifier.py`).
+The `*.labels.json` sidecars ARE tracked in git (under the .gitignore
+exception `gt_clips/*.labels.json`); the .mp4 files are not (too big).
+The training pipeline reads the sidecars directly — see
+`train_taping_classifier.py` and the labeling convention in
+`gt_clips/MEMORY.md`.
 
 **Generate dashboard:**
 ```bash
