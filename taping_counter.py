@@ -174,15 +174,49 @@ V2_CONFIG = {
     # Validated against 60 GT toss events: LEFT baseline=3.6 vs toss median=12.6 (min 9.3),
     # RIGHT baseline=0.8 vs toss median=10.9 (min 7.6). Clean separation either side.
 
-    # Air motion is mean-smoothed over 3 frames. We deliberately keep the
-    # window short to preserve the brief toss-pulse peak (real tosses span
-    # ~5-8 frames). The HEVC every-50-frames keyframe artifact spikes both
-    # tables simultaneously — handled by common-mode subtraction in the
-    # TapingCounter run loop (subtract min(left, right) from each).
+    # Air motion smoothing: MEAN over 3 frames. Median was tested but slightly
+    # hurt RIGHT recall (real RIGHT pulses are short — median compressed them).
     "air_motion_smooth": 3,
-    "air_toss_thresh_left":  8.5,     # GT min was 9.3
-    "air_toss_thresh_right": 7.0,     # GT min was 7.6
-    "common_mode_subtract": False,    # disabled — penalizes RIGHT (lower baseline)
+    # ── PRIMARY high-confidence thresholds ──
+    "air_toss_thresh_left":  8.5,     # peak air motion above this → toss
+    "air_toss_thresh_right": 7.0,
+    # ── SECONDARY low-confidence path ──
+    # If air motion only crosses the secondary threshold but the table signal
+    # CLEARLY DROPPED within 1.5s after the peak (ie blanket was removed),
+    # treat as a toss. Catches brief/weak air pulses we'd otherwise miss.
+    # Secondary path disabled — set thresholds equal to primary. Empirical
+    # tuning showed lower thresholds added FPs faster than TPs because
+    # table-signal drops happen for many non-toss reasons. Plumbing kept for
+    # future experiments (e.g., conditional secondary path during NORMAL mode).
+    "air_toss_thresh_left_low":  8.5,
+    "air_toss_thresh_right_low": 7.0,
+    "secondary_drop_window_sec": 2.0,
+    "secondary_drop_min": 14.0,
+    "common_mode_subtract": False,
+
+    # ── Optical-flow direction gate (v3 addition) ──
+    # When an air pulse fires, compute Farneback dense flow over the last
+    # FLOW_FRAME_BUFFER frames of the air ROI (downsampled). The mean flow
+    # vector must point toward the heap (within angle_tolerance degrees) and
+    # have magnitude > min_flow_magnitude — otherwise reject as worker
+    # walking-through, helper movement, or other non-toss motion.
+    "use_flow_gate": False,    # DISABLED — see CH27 v3 notes in PROJECT_NOTES.md
+                               # Tested empirically on the 5-min GT clip and the
+                               # air-zone optical flow turned out to be dominated
+                               # by worker arm follow-through (DOWN motion) rather
+                               # than the brief blanket trajectory. Plumbing kept
+                               # for future re-use with a tighter ROI or in
+                               # combination with a learned pulse classifier.
+    # Math-convention angles (0=right, 90=up). Image y is flipped before atan2.
+    # NOTE: Empirically the dominant motion in the air zone during a toss is
+    # actually the worker's ARM FOLLOW-THROUGH (down + sideways toward heap)
+    # not the blanket trajectory. We use these empirical targets:
+    "target_angle_left":  -90.0,   # LEFT: worker arm comes back DOWN after throw
+    "target_angle_right": -90.0,   # RIGHT: same — DOWN motion is the toss signature
+    "angle_tolerance":    100.0,   # very wide — only reject if motion is clearly UP (no toss)
+    "min_flow_magnitude": 0.30,    # in downsampled-pixel units per frame
+    "flow_buffer_frames": 8,       # ~0.32s of air-ROI history to compute flow over
+    "flow_downsample": (160, 80),  # resize air ROI before Farneback (speed)
 
     # Context gate — must have been "loaded" recently (table actually had a blanket)
     # to qualify as a real toss. Rejects helper restocks + workers walking through.
@@ -199,6 +233,12 @@ V2_CONFIG = {
     "min_cycle_sec": 4.5,             # min cycle duration
     "max_break_sec": 25.0,            # signal sustained low → break, suspend counting
     "warmup_frames": 10,
+    # ── v3: Pulse-timeout ──
+    # If air-motion stays above threshold for >this without dropping below the
+    # pulse-end (0.7×threshold), force-emit at the running peak. This catches
+    # cases where continuous activity (worker handling blankets back-to-back)
+    # never lets the signal drop, so the pulse never naturally closes.
+    "pulse_timeout_sec": 2.5,
 
     # ── Conservative-mode break detector ──
     # If no toss in IDLE_SEC (workers likely on break, moving heap), require a
@@ -610,6 +650,21 @@ class _TableTrackerV2:
         self.air_pulse_peak = 0.0
         self.air_pulse_peak_t = None
         self.air_pulse_peak_f = None
+        self._pulse_open_t = 0.0         # when the current pulse opened (for timeout)
+        # Pending low-confidence candidates: list of dicts to re-evaluate after
+        # secondary_drop_window_sec elapses, by checking if the table signal
+        # dropped post-peak (proves the blanket actually left the table)
+        self.pending = []
+        # Per-table secondary thresholds
+        self.air_thresh_low = (cfg["air_toss_thresh_left_low"]
+                               if name == "left"
+                               else cfg["air_toss_thresh_right_low"])
+
+        # Optical-flow direction gate — keep last N downsampled air-ROI frames
+        self.flow_buf = deque(maxlen=cfg.get("flow_buffer_frames", 8))
+        self.target_angle = (cfg["target_angle_left"] if name == "left"
+                             else cfg["target_angle_right"])
+        self.flow_rejected = []   # audit log of pulses killed by direction gate
 
         # Frame-data fields
         self.last_mean = 0.0
@@ -668,7 +723,16 @@ class _TableTrackerV2:
         cm = getattr(self, "_common_subtract", 0.0)
         self.last_air_motion = max(0.0, raw_motion - cm)
 
-        # Smoothed air motion
+        # Buffer downsampled air-ROI gray for optical-flow direction gate
+        if self.cfg.get("use_flow_gate", False):
+            target_size = self.cfg.get("flow_downsample", (160, 80))
+            air_uint8 = (air if air.dtype == np.uint8
+                         else air.clip(0, 255).astype(np.uint8))
+            air_small = cv2.resize(air_uint8, target_size,
+                                   interpolation=cv2.INTER_AREA)
+            self.flow_buf.append(air_small)
+
+        # Smoothed air motion — MEAN over the smoothing window
         self.air_smooth_buf.append(self.last_air_motion)
         air_smoothed = float(np.mean(self.air_smooth_buf))
 
@@ -738,59 +802,191 @@ class _TableTrackerV2:
         # We track the signal as it rises above threshold (entering pulse), record
         # its peak, then emit when it drops back below. This way we get the PEAK
         # timestamp + magnitude, not just the rising edge.
-        if not self.in_air_pulse and air_smoothed > eff_air_thresh:
-            # Pulse start
+        # Both thresholds apply conservative-mode scaling
+        eff_air_thresh_low = self.air_thresh_low * (cons_mult if in_conservative else 1.0)
+
+        # Use the LOWER threshold for pulse open/close so we capture weaker pulses
+        # and decide later (high vs low confidence) at pulse end.
+        eff_open_thresh = eff_air_thresh_low
+
+        if not self.in_air_pulse and air_smoothed > eff_open_thresh:
             self.in_air_pulse = True
             self.air_pulse_peak = air_smoothed
             self.air_pulse_peak_t = t_sec
             self.air_pulse_peak_f = frame_idx
+            self._pulse_open_t = t_sec
         elif self.in_air_pulse:
             if air_smoothed > self.air_pulse_peak:
                 self.air_pulse_peak = air_smoothed
                 self.air_pulse_peak_t = t_sec
                 self.air_pulse_peak_f = frame_idx
-            if air_smoothed < eff_air_thresh * 0.7:
-                # Pulse ended — evaluate
+            # PULSE-TIMEOUT — force-close if open too long without natural drop
+            pulse_age = t_sec - self._pulse_open_t
+            timeout_hit = pulse_age >= cfg.get("pulse_timeout_sec", 1.5)
+            if air_smoothed < eff_open_thresh * 0.7 or timeout_hit:
                 self.in_air_pulse = False
-                # Context gate: was a blanket on the table in the last context_window?
+                # Decide: PRIMARY (peak ≥ high thresh) or SECONDARY (low only)
+                peak = self.air_pulse_peak
+                is_primary = peak >= eff_air_thresh
+                # Common gates
                 ctx_max = max(self.signal_history) if self.signal_history else 0.0
-                # Cooldown
+                ctx_at_peak = ctx_max
                 gap_ok = (self.air_pulse_peak_t - self.last_toss_t) >= min_gap
-                # Min cycle
                 cyc_ok = (self.cycle_start_t is None
                           or (self.air_pulse_peak_t - self.cycle_start_t) >= min_cycle)
-                # Not in break
                 state_ok = self.state != "break"
+                base_ok = ctx_max >= ctx_thresh and gap_ok and cyc_ok and state_ok
 
-                if (ctx_max >= ctx_thresh and gap_ok and cyc_ok and state_ok):
-                    cycle_age = (self.air_pulse_peak_t - self.cycle_start_t
-                                 if self.cycle_start_t else 0.0)
-                    event = ("event", {
-                        "type": "taping_cycle_complete",
-                        "table": self.name,
-                        "time_sec": round(self.air_pulse_peak_t, 2),
-                        "frame": self.air_pulse_peak_f,
-                        "cycle_start_sec": round(self.cycle_start_t or self.air_pulse_peak_t, 2),
-                        "cycle_duration_sec": round(cycle_age, 2),
-                        "peak_signal": round(ctx_max, 2),
-                        "air_motion_peak": round(self.air_pulse_peak, 2),
-                        "long_cycle": cycle_age > 30.0,
-                        "via_overlap_detector": False,
+                # Optical-flow direction gate (only if enabled and pulse looks
+                # primary). Soft-fail: if buffer empty, skip the gate.
+                flow_ok = True
+                flow_info = None
+                if is_primary and base_ok and cfg.get("use_flow_gate", False):
+                    flow_info = self._compute_toss_direction()
+                    if flow_info is not None:
+                        vx, vy, mag, ang = flow_info
+                        flow_ok = self._direction_passes(ang, mag)
+
+                if is_primary and base_ok and flow_ok:
+                    event = self._emit(t_sec, signal, ctx_at_peak,
+                                       load_on, load_strong, flow=flow_info)
+                elif is_primary and base_ok and not flow_ok:
+                    # Direction gate killed it — log to suppressed for audit
+                    if not hasattr(self, "flow_rejected"):
+                        self.flow_rejected = []
+                    if flow_info is not None:
+                        vx, vy, mag, ang = flow_info
+                        self.flow_rejected.append({
+                            "table": self.name,
+                            "time_sec": round(self.air_pulse_peak_t, 2),
+                            "air_peak": round(self.air_pulse_peak, 2),
+                            "flow_mag": round(mag, 2),
+                            "flow_angle": round(ang, 1),
+                            "target_angle": self.target_angle,
+                        })
+                elif (not is_primary) and base_ok:
+                    # Defer — re-check after the secondary-drop window
+                    self.pending.append({
+                        "peak_t": self.air_pulse_peak_t,
+                        "peak_f": self.air_pulse_peak_f,
+                        "peak_air": peak,
+                        "ctx_at_peak": ctx_at_peak,
+                        "signal_at_peak": signal,
+                        "deadline": self.air_pulse_peak_t + cfg["secondary_drop_window_sec"],
+                        "cycle_start_at_emit": self.cycle_start_t,
                     })
-                    self.last_toss_t = self.air_pulse_peak_t
-                    self.last_toss_frame = self.air_pulse_peak_f
-                    # Reset state to "loaded" if signal still elevated (back-to-back)
-                    # or "empty" if signal has dropped
-                    if signal > load_on:
-                        self.state = "loaded"
-                        self.cycle_start_t = self.air_pulse_peak_t
-                        self.cycle_start_frame = self.air_pulse_peak_f
-                        self.peak_signal = signal
-                    else:
-                        self.state = "empty"
-                        self.cycle_start_t = None
-                    self.frames_above_load = 0
 
+        # Process pending secondary candidates whose deadline has arrived
+        if event is None and self.pending:
+            still_pending = []
+            for c in self.pending:
+                if t_sec < c["deadline"]:
+                    still_pending.append(c)
+                    continue
+                # Evaluate: did table signal drop since the peak?
+                # Compute min signal in last (deadline - peak_t) seconds
+                window_frames = int(cfg["secondary_drop_window_sec"] * self.fps)
+                recent = list(self.long_signal_history)[-window_frames:] if self.long_signal_history else []
+                if recent:
+                    sig_min = min(recent)
+                    drop = c["ctx_at_peak"] - sig_min
+                else:
+                    drop = 0.0
+                # Re-check cooldown in case primary fired since
+                gap_ok = (c["peak_t"] - self.last_toss_t) >= min_gap
+                if drop >= cfg["secondary_drop_min"] and gap_ok and self.state != "break":
+                    # Secondary-path toss confirmed
+                    self.air_pulse_peak_t = c["peak_t"]
+                    self.air_pulse_peak_f = c["peak_f"]
+                    self.air_pulse_peak = c["peak_air"]
+                    if c["cycle_start_at_emit"] is not None:
+                        self.cycle_start_t = c["cycle_start_at_emit"]
+                    event = self._emit(t_sec, signal, c["ctx_at_peak"],
+                                       load_on, load_strong, secondary=True)
+                # else: drop the candidate (no real toss)
+            self.pending = still_pending
+
+        return event
+
+    def _compute_toss_direction(self):
+        """Compute mean optical-flow vector over the buffered air-ROI frames.
+        Returns (vx, vy, magnitude, angle_deg) in math convention (0=right, 90=up),
+        or None if not enough frames buffered.
+        """
+        if len(self.flow_buf) < 3:
+            return None
+        frames = list(self.flow_buf)
+        flows = []
+        # Compute frame-to-frame Farneback flows; average the resulting field
+        for i in range(len(frames) - 1):
+            f = cv2.calcOpticalFlowFarneback(
+                frames[i], frames[i + 1], None,
+                pyr_scale=0.5, levels=2, winsize=15,
+                iterations=2, poly_n=5, poly_sigma=1.1, flags=0)
+            flows.append(f)
+        flow = np.mean(flows, axis=0)
+        # Mask: only consider pixels with significant motion (>0.5 px) so the
+        # mean isn't washed out by the static majority of the frame
+        mag_pix = np.sqrt(flow[..., 0] ** 2 + flow[..., 1] ** 2)
+        mask = mag_pix > 0.5
+        if mask.sum() < 50:
+            # Too few moving pixels — no coherent motion event
+            return 0.0, 0.0, 0.0, 0.0
+        vx = float(flow[..., 0][mask].mean())
+        vy = float(flow[..., 1][mask].mean())
+        mag = (vx * vx + vy * vy) ** 0.5
+        # OpenCV image y is downward; flip so positive vy = upward in math sense
+        ang = float(np.degrees(np.arctan2(-vy, vx)))
+        return vx, vy, mag, ang
+
+    def _direction_passes(self, ang, mag):
+        """Soft gate: only REJECT pulses with high magnitude in clearly WRONG
+        direction. Low-magnitude pulses pass (insufficient evidence to reject).
+        This avoids penalizing tosses that produce small but real motion (e.g.,
+        the RIGHT table where the throw is short and quick)."""
+        cfg = self.cfg
+        if mag < cfg.get("min_flow_magnitude", 0.3):
+            return True  # not enough flow to call a direction — accept by default
+        target = self.target_angle
+        delta = abs(((ang - target + 180) % 360) - 180)
+        return delta <= cfg.get("angle_tolerance", 65.0)
+
+    def _emit(self, t_sec, signal, ctx_at_peak, load_on, load_strong,
+              secondary=False, flow=None):
+        """Common emission helper — builds event dict + resets state."""
+        cycle_age = (self.air_pulse_peak_t - self.cycle_start_t
+                     if self.cycle_start_t else 0.0)
+        payload = {
+            "type": "taping_cycle_complete",
+            "table": self.name,
+            "time_sec": round(self.air_pulse_peak_t, 2),
+            "frame": self.air_pulse_peak_f,
+            "cycle_start_sec": round(self.cycle_start_t or self.air_pulse_peak_t, 2),
+            "cycle_duration_sec": round(cycle_age, 2),
+            "peak_signal": round(ctx_at_peak, 2),
+            "air_motion_peak": round(self.air_pulse_peak, 2),
+            "long_cycle": cycle_age > 30.0,
+            "via_overlap_detector": False,
+            "via_secondary_path": secondary,
+        }
+        if flow is not None:
+            vx, vy, mag, ang = flow
+            payload["flow_vx"] = round(vx, 2)
+            payload["flow_vy"] = round(vy, 2)
+            payload["flow_mag"] = round(mag, 2)
+            payload["flow_angle"] = round(ang, 1)
+        event = ("event", payload)
+        self.last_toss_t = self.air_pulse_peak_t
+        self.last_toss_frame = self.air_pulse_peak_f
+        if signal > load_on:
+            self.state = "loaded"
+            self.cycle_start_t = self.air_pulse_peak_t
+            self.cycle_start_frame = self.air_pulse_peak_f
+            self.peak_signal = signal
+        else:
+            self.state = "empty"
+            self.cycle_start_t = None
+        self.frames_above_load = 0
         return event
 
 
@@ -1187,6 +1383,10 @@ class TapingCounter:
             "suppressed_candidates": self.suppressed,
             "frame_data": self.frame_data,
             "heap_trace": self.heap_trace,
+            "flow_rejected": (
+                getattr(self.left, "flow_rejected", []) +
+                getattr(self.right, "flow_rejected", [])
+            ) if self.version == "v2" else [],
         }
 
 
