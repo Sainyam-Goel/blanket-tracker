@@ -37,8 +37,10 @@ pipeline consumes this file directly.
 import argparse
 import json
 import os
+import queue
 import sys
 import time
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -46,7 +48,6 @@ import cv2
 import numpy as np
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
-from PIL import Image, ImageTk
 
 # Reuse v2 ROI constants for the overlay (visualised but not enforced here)
 HERE = Path(__file__).resolve().parent
@@ -59,24 +60,26 @@ try:
     )
 except Exception as ex:  # pragma: no cover — degrade gracefully
     print(f"[warn] Could not import from taping_counter.py: {ex}")
-    LEFT_TABLE_ROI_V2 = (200, 750, 650, 940)
+    LEFT_TABLE_ROI_V2 = (200, 750, 780, 940)
     RIGHT_TABLE_ROI_V2 = (1140, 720, 1750, 970)
     HEAP_ROI = (700, 350, 1220, 750)
-    LEFT_AIR_ROI_V2 = (160, 580, 660, 740)
-    RIGHT_AIR_ROI_V2 = (1180, 580, 1750, 720)
+    LEFT_AIR_ROI_V2 = (240, 580, 740, 740)
+    RIGHT_AIR_ROI_V2 = (1180, 580, 1860, 720)
     TapingCounter = None
 
-# Display canvas size (source 1920×1080 → 1280×720 = 0.667× scale)
-DISPLAY_W, DISPLAY_H = 1280, 720
+# Display canvas size (source 1920×1080 → 960×540 = 0.5× scale).
+# Keep this plus the 320 px label panel below typical laptop screen width so
+# the canvas does not get squeezed out by Tk's pack layout.
+DISPLAY_W, DISPLAY_H = 960, 540
 SCALE_X = DISPLAY_W / 1920
 SCALE_Y = DISPLAY_H / 1080
 
 # Color scheme (RGB tuples for matplotlib-style + Tk hex strings)
 COLOR = {
-    "left_load":  "#a7f3d0",   # light green
-    "left_toss":  "#10b981",   # bold green
-    "right_load": "#bfdbfe",   # light blue
-    "right_toss": "#3b82f6",   # bold blue
+    "left_load":  "#10b981",   # table/lower ROI green
+    "left_toss":  "#a7f3d0",   # air/upper ROI light green
+    "right_load": "#3b82f6",   # table/lower ROI blue
+    "right_toss": "#bfdbfe",   # air/upper ROI light blue
     "active_left":  "#10b981",
     "active_right": "#3b82f6",
     "v2_auto_unconfirmed": "#fbbf24",  # amber — not yet confirmed
@@ -186,15 +189,19 @@ class GTLabeler:
         self.is_playing = False
         self.last_save_time = 0.0
         self.dirty = False
+        self.loading_suggestions = False
+        self.suggestion_generation = 0
+        self.suggestion_queue = queue.Queue()
 
         # Labels & undo
         self.labels = []  # list of {frame, time_sec, table, type, note, source, confirmed}
         self.undo_stack = []  # list of (action, label-snapshot) tuples
         self.selected_idx = None
 
-        # Build UI then load existing sidecar / pre-populate
+        # Build UI and show the first frame before doing any expensive work.
+        # v2 pre-population can take long enough to make Tk look like the video
+        # failed to load if we run it before the first render.
         self._build_ui()
-        self._load_or_prepopulate_labels()
         # Force-read frame 0 so cv2 internal state is fully initialized before
         # we attempt seeking. Without this, the first cap.set+read on HEVC
         # video can return None silently.
@@ -206,6 +213,7 @@ class GTLabeler:
         self._update_status()
         # Grab keyboard focus on the root so arrow keys / A / D fire immediately
         self.root.after(100, lambda: self.root.focus_force())
+        self.root.after(100, self._load_existing_or_start_prepopulate)
 
         # Auto-save loop
         self.root.after(AUTO_SAVE_INTERVAL_MS, self._autosave_tick)
@@ -218,6 +226,8 @@ class GTLabeler:
         toolbar.pack(side=tk.TOP, fill=tk.X)
         tk.Button(toolbar, text="Open…", command=self._open_dialog).pack(side=tk.LEFT, padx=2)
         tk.Button(toolbar, text="Save  (⌘S)", command=self._save).pack(side=tk.LEFT, padx=2)
+        self.play_btn = tk.Button(toolbar, text="Play (Space)", command=self._toggle_play)
+        self.play_btn.pack(side=tk.LEFT, padx=2)
         tk.Button(toolbar, text="Help (?)", command=self._show_help).pack(side=tk.LEFT, padx=2)
         tk.Label(toolbar, text="  Active:", bg="#0e1116", fg="#9ca3af").pack(side=tk.LEFT, padx=(20, 2))
         self.active_label = tk.Label(toolbar, text="LEFT", bg=COLOR["active_left"], fg="black",
@@ -344,15 +354,50 @@ class GTLabeler:
 
     # ── Pre-populate / load ──────────────────────────────────────
 
-    def _load_or_prepopulate_labels(self):
+    def _load_existing_or_start_prepopulate(self):
         existing = load_sidecar(self.video_path)
         if existing and existing.get("labels"):
             self.labels = existing["labels"]
             print(f"[info] Loaded {len(self.labels)} existing labels from sidecar")
+            self._refresh_label_list()
+            self._update_status()
             return
 
-        # Pre-populate from v2
-        v2_events = get_v2_detections(self.video_path, self.fps)
+        self._start_prepopulate_worker()
+
+    def _start_prepopulate_worker(self):
+        generation = self.suggestion_generation + 1
+        self.suggestion_generation = generation
+        video_path = self.video_path
+        fps = self.fps
+        self.loading_suggestions = True
+        self._update_status()
+
+        def worker():
+            events = get_v2_detections(video_path, fps)
+            self.suggestion_queue.put((generation, video_path, events))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.root.after(100, self._poll_suggestion_queue)
+
+    def _poll_suggestion_queue(self):
+        try:
+            generation, video_path, events = self.suggestion_queue.get_nowait()
+        except queue.Empty:
+            if self.loading_suggestions:
+                self.root.after(100, self._poll_suggestion_queue)
+            return
+        self._apply_prepopulated_labels(generation, video_path, events)
+        if self.loading_suggestions:
+            self.root.after(100, self._poll_suggestion_queue)
+
+    def _apply_prepopulated_labels(self, generation, video_path, v2_events):
+        if generation != self.suggestion_generation or video_path != self.video_path:
+            return
+        self.loading_suggestions = False
+        if self.labels:
+            self._update_status()
+            return
         for e in v2_events:
             self.labels.append({
                 "frame": e["frame"],
@@ -364,6 +409,8 @@ class GTLabeler:
                 "confirmed": False,
             })
         self.labels.sort(key=lambda l: l["frame"])
+        self._refresh_label_list()
+        self._update_status()
 
     # ── Frame rendering ──────────────────────────────────────────
 
@@ -393,8 +440,11 @@ class GTLabeler:
             self._draw_rois(rgb_small)
         self._draw_overlay(rgb_small)
 
-        img = Image.fromarray(rgb_small)
-        self.tk_image = ImageTk.PhotoImage(image=img)
+        # Use Tk's native PPM image path instead of PIL.ImageTk. On some macOS
+        # Tk builds ImageTk creates a valid canvas item but paints it blank.
+        h, w = rgb_small.shape[:2]
+        ppm = f"P6\n{w} {h}\n255\n".encode("ascii") + rgb_small.tobytes()
+        self.tk_image = tk.PhotoImage(data=ppm, format="PPM")
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
         self.slider_var.set(self.frame_idx)
@@ -434,6 +484,7 @@ class GTLabeler:
 
     def _step(self, delta):
         self.is_playing = False
+        self.play_btn.config(text="Play (Space)")
         new_idx = max(0, min(self.total_frames - 1, self.frame_idx + delta))
         if new_idx != self.frame_idx:
             self.frame_idx = new_idx
@@ -442,6 +493,8 @@ class GTLabeler:
 
     def _toggle_play(self):
         self.is_playing = not self.is_playing
+        self.play_btn.config(text="Pause (Space)" if self.is_playing else "Play (Space)")
+        self._update_status()
         if self.is_playing:
             self._play_tick()
 
@@ -451,6 +504,7 @@ class GTLabeler:
         self.frame_idx = min(self.frame_idx + 1, self.total_frames - 1)
         if self.frame_idx >= self.total_frames - 1:
             self.is_playing = False
+            self.play_btn.config(text="Play (Space)")
         self._render_frame()
         self._update_status()
         delay_ms = max(1, int(1000 / self.fps))
@@ -657,8 +711,12 @@ class GTLabeler:
             saved_str = "unsaved"
         if self.dirty:
             saved_str = "● UNSAVED CHANGES (Cmd+S)"
+        if self.loading_suggestions:
+            saved_str = "loading v2 suggestions..."
+        play_state = "PLAYING" if self.is_playing else "PAUSED"
         self.status_var.set(
             f" frame {self.frame_idx:>5d} · {t_sec:6.2f}s / {self.duration_sec:.0f}s   "
+            f"·   {play_state}   "
             f"·   ACTIVE: {self.active_table.upper()}   "
             f"·   {n_total} labels (L={n_left}, R={n_right}, "
             f"{n_unconf} unconfirmed)   ·   {saved_str}"
@@ -675,9 +733,13 @@ class GTLabeler:
                 if messagebox.askyesno("Save?", "Save current labels before opening new video?"):
                     self._save()
             # Replace state with a new app rooted at same window
+            new_cap = cv2.VideoCapture(path)
+            if not new_cap.isOpened():
+                messagebox.showerror("Error", f"Cannot open video:\n{path}")
+                return
             self.cap.release()
             self.video_path = path
-            self.cap = cv2.VideoCapture(path)
+            self.cap = new_cap
             self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 25.0
             self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             self.duration_sec = self.total_frames / self.fps
@@ -687,12 +749,17 @@ class GTLabeler:
             self.selected_idx = None
             self.last_save_time = 0.0
             self.dirty = False
+            self.loading_suggestions = False
+            self.suggestion_generation += 1
             self.root.title(f"CH27 GT Labeler — {Path(path).name}")
             self.slider.config(to=max(1, self.total_frames - 1))
-            self._load_or_prepopulate_labels()
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            _ok, _f = self.cap.read()
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             self._render_frame()
             self._refresh_label_list()
             self._update_status()
+            self.root.after(100, self._load_existing_or_start_prepopulate)
 
     def _show_help(self):
         msg = (

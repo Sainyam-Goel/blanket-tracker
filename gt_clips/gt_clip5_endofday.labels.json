@@ -1,0 +1,29 @@
+{
+  "video": "gt_clip5_endofday.mp4",
+  "video_path": "/Users/sai/Desktop/Claude Coding/blanket-tracker/gt_clips/gt_clip5_endofday.mp4",
+  "fps": 25.0,
+  "total_frames": 7519,
+  "duration_sec": 300.76,
+  "labeled_at": "2026-05-03T02:12:07",
+  "labeler_notes": "There were no blankets processed in this video, only workers sitting on the tables chatting and taking a break",
+  "labels": [
+    {
+      "frame": 1335,
+      "time_sec": 53.4,
+      "table": "right",
+      "type": "load",
+      "note": "The processed blanket heap is getting moved",
+      "source": "manual",
+      "confirmed": true
+    },
+    {
+      "frame": 5990,
+      "time_sec": 239.6,
+      "table": "right",
+      "type": "load",
+      "note": "A processed blanket heap from the back is getting moved",
+      "source": "manual",
+      "confirmed": true
+    }
+  ]
+}

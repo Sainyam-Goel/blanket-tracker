@@ -1,5 +1,141 @@
 # Blanket Tracker — Project Notes & Insights
 
+---
+
+# 🚧 RESUME HERE — CH27 v4 in flight (paused 2026-05-03 night)
+
+## Where we paused
+
+After v2 hit F1=0.85 and v3 plumbing didn't lift it, the user labeled **5 clips
+with their own browser-based labeler** (`gt_labeler_web.py`) and we built the
+**v4 classifier-training scaffold** (`train_taping_classifier.py`).
+
+ROI verification + candidate-collection coverage diagnostic ✅ **PASSED**:
+
+| Clip | LEFT cov | RIGHT cov |
+|---|---:|---:|
+| morning | 5/5 (100%) | 36/36 (100%) |
+| prelunch | 18/22 (82%) ⚠️ | 26/26 (100%) |
+| postlunch | 6/6 (100%) | 31/31 (100%) |
+| afternoon_dark | 27/27 (100%) | 9/9 (100%) |
+| **TOTAL** | **86/91 (94.5%)** | **102/102 (100%)** |
+
+→ **97.4% of GT tosses are reachable** by the candidate-collection pipeline
+with current v2 ROIs. ROIs are good enough to proceed.
+
+Open issue: 4 LEFT prelunch tosses missed by candidates. Likely the LEFT-AIR
+ROI overlaps a heap pile during the slowdown. Not blocking — investigate
+when convenient.
+
+## Future steps (in order)
+
+### Step 1 — Phase 3: Feature extraction (~1-2 hr)
+Build `extract_features(candidate, signal_window)` in
+`taping_counter.py` (or in `train_taping_classifier.py` — refactor later).
+12-15 features per candidate:
+- Air shape: peak_height, peak_above_baseline, duration_above_thresh,
+  rise_time_sec, decay_time_sec, skewness, auc
+- Table context: pre_peak_table_max, post_peak_table_min, table_drop,
+  table_signal_at_peak
+- Cross-table: simultaneous_air_other_table, air_diff_to_other
+- Optional: flow_magnitude, flow_direction_delta (re-enable v3 plumbing)
+
+The candidate emit (already done — every air-pulse end with lowered thresh)
+needs to capture per-frame signals for peak±25 frames so feature extraction
+has a window to work on. Currently candidates have only peak metadata.
+Either (a) extend the candidate payload to include a `signal_window` or
+(b) re-read frame_data from `results["frame_data"]` (already at full rate
+when `frame_data_every=1`) and extract the window post-hoc.
+
+### Step 2 — Phase 4: Train RandomForest (~1 hr)
+- For each candidate: match nearest GT cluster of same table+type within
+  2s peak-to-peak. Label=1 if matched, 0 otherwise.
+- Train `RandomForestClassifier(n_estimators=200, max_depth=5,
+  class_weight="balanced", random_state=42)` with 5-fold StratifiedKFold
+  on clips 1-3
+- Hold out clip 4 for FINAL test (afternoon_dark — most-different SKU)
+- Save `taping_pulse_classifier_toss_v4.pkl` (joblib.dump compress=3)
+- Save `classifier_metadata.json` (feature names + order, CV scores,
+  held-out scores, feature importances)
+
+### Step 3 — Phase 5: Build CH27 v4 (~2 hr)
+- Load classifier in `TapingCounter.__init__` when version="v4"
+- In v2 pulse-end logic, replace hard threshold gates with:
+  `extract_features → classifier.predict_proba > 0.5 → emit if cooldown OK`
+- Re-enable optical-flow plumbing as feature input (was disabled in v3)
+- Add `--version v4` CLI flag, keep v2 as fallback
+
+### Step 4 — Validate (~1 hr)
+- Run v4 on each labeled clip, compute precision/recall vs GT clusters
+- Target: F1 ≥ 0.92 on clip 4 held-out
+
+### Step 5 — Production (~1 hr)
+- Full-day v4 run: `python3 run_full_day.py --ch27-only --ch27-version v4`
+- Regenerate dashboard with v4 numbers + v2 comparison delta
+- Update PROJECT_NOTES + README + memory file
+- Commit + push
+
+### Step 6 (stretch) — investigate the 4 missed LEFT prelunch tosses
+Spot-check around the frames in `gt_clips/gt_clip2_prelunch.labels.json`
+for LEFT clusters that have no v2 candidate within 2s. Adjust LEFT-AIR
+ROI if needed. Re-run candidate collection.
+
+## Key context to remember
+
+1. **Labeling convention** (from `gt_clips/MEMORY.md`):
+   - `A`=load (table ROI), `D`=toss (air ROI)
+   - **Multiple adjacent frames per ONE physical action** — already handled
+     by the `cluster_labels()` helper (≤1s frame gap merges into one window).
+2. **Tossses are the cycle count** — that's what production cares about.
+   Loads are bonus (could train a separate classifier in v5 if needed).
+3. **`gt_clips/*.labels.json` ARE tracked in git** (per .gitignore exception).
+   `*.mp4` and `*.v2_detections.json` are NOT tracked (.gitignore).
+4. **`gt_labeler_web.py`** is the user's browser-based labeler — same JSON
+   schema as my Tk `gt_labeler.py`. Both work.
+5. **Candidate collection thresholds** (in `train_taping_classifier.py`):
+   `air_toss_thresh_left=3, right=2, ctx=0, min_gap=0.5, min_cycle=0.5,
+   load_strong=0`. These produce ~2-3× more candidates than v2 emits.
+
+## Quick resume commands
+
+```bash
+cd "/Users/sai/Desktop/Claude Coding/blanket-tracker"
+
+# Confirm coverage still 97.4% (sanity check after any code change)
+python3 train_taping_classifier.py --coverage-only
+
+# When ready to train (Phase 3-4 implementation needed first):
+python3 train_taping_classifier.py
+# → produces taping_pulse_classifier_toss_v4.pkl + classifier_metadata.json
+
+# Validate v4 per-clip:
+for c in gt_clips/gt_clip{1,2,3,4}_*.mp4; do
+  python3 taping_counter.py "$c" --version v4 --output /tmp/v4_$(basename $c .mp4).json
+done
+
+# Production:
+python3 run_full_day.py --ch27-only --ch27-version v4
+python3 generate_dashboard.py && cp blanket_tracker_dashboard.html index.html
+```
+
+## Files in flight (uncommitted before pause)
+
+- `train_taping_classifier.py` (new, ~250 LOC) — clustering + coverage diag
+- `gt_labeler_web.py` (new — user's tool, copy lives in repo)
+- `gt_clips/*.labels.json` (5 files, ~6,925 frame-labels = ~333 unique
+  action windows after clustering · 162 toss events)
+- `gt_clips/MEMORY.md` (user's labeling convention notes)
+- `taping_counter.py` (minor uncommitted edits from earlier)
+- `gt_labeler.py` (Tk version with the bug fixes from first user test)
+- `README.md` (mention of labeler)
+
+All to be committed at pause.
+
+## Approved plan reference
+`/Users/sai/.claude/plans/enchanted-giggling-plum.md`
+
+---
+
 ## Client & Setup
 - **Client**: Mr. Goyal, blanket factory in Panipat, Haryana
 - **Goal**: Count blankets being processed via NVR security camera feeds

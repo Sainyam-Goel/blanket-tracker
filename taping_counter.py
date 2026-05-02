@@ -78,12 +78,12 @@ HEAP_ROI        = (700, 350, 1220, 750)   # validation-only
 # frame at t=280s of the GT clip (10:24:53). MOG2 background subtraction needs the
 # ROI to be dominated by table surface, not surrounding floor or workers, so the
 # foreground-area signal cleanly tracks blanket presence.
-LEFT_TABLE_ROI_V2  = (200, 750, 650, 940)
+LEFT_TABLE_ROI_V2  = (200, 750, 780, 940)
 RIGHT_TABLE_ROI_V2 = (1140, 720, 1750, 970)
 # Air zone above each table — narrow horizontal strip where a tossed blanket
 # appears momentarily. Used as a confirmation signal in v2.
-LEFT_AIR_ROI_V2  = (160, 580, 660, 740)
-RIGHT_AIR_ROI_V2 = (1180, 580, 1750, 720)
+LEFT_AIR_ROI_V2  = (240, 580, 740, 740)
+RIGHT_AIR_ROI_V2 = (1180, 580, 1860, 720)
 
 TAPE_DISPENSER_LEFT_ROI  = (0, 750, 120, 950)     # legacy / unused
 TAPE_DISPENSER_RIGHT_ROI = (1800, 750, 1920, 950) # legacy / unused

@@ -74,6 +74,8 @@ Tracks blankets through the weighing scale chokepoint:
 | `blanket_counter.py` | CH21 passing counter v4 (~830 lines) |
 | `taping_counter.py`  | CH27 taping counter v1 (two parallel state machines) |
 | `taping_roi_calibrator.py` | Overlay ROI rectangles on a sample frame for tuning |
+| `gt_labeler_web.py` | Browser-based CH27 ground-truth labeling tool |
+| `gt_labeler.py` | Legacy Tkinter CH27 ground-truth labeling tool |
 | `generate_dashboard.py` | Reads both JSON outputs, generates dashboard HTML |
 | `run_full_day.py` | Batch processor for multi-segment NVR recordings |
 | `blanket_tracker_dashboard.html` | Self-contained dual-camera dashboard (~2.5MB) |
@@ -120,16 +122,17 @@ python3 taping_counter.py /path/to/ch27_video.mp4 --version v1 --frame-step 2  #
 python3 taping_roi_calibrator.py /path/to/sample_frame.png  # writes annotated PNG
 ```
 
-**Label ground truth for the classifier (gt_labeler.py):**
+**Label ground truth for the classifier:**
 ```bash
-python3 gt_labeler.py path/to/clip.mp4
+python3 gt_labeler_web.py path/to/clip.mp4
 ```
 Frame-accurate labeling tool. Pre-populates suggested toss events from the v2
 algorithm; you confirm/edit/delete and add missed events. Output: sidecar
 `<clip>.labels.json` next to the video.
 
 Keyboard: ←/→ step ±1 frame · Shift+←/→ step ±1 s · Space play · Tab
-toggle active table (LEFT↔RIGHT) · **A** mark load · **D** mark toss ·
+or T toggle active table (LEFT↔RIGHT) · **A** mark load in the lower table ROI
+· **D** mark toss through the upper air ROI ·
 Enter edit note · Backspace delete · Cmd+S save · Cmd+Z undo · R toggle ROI
 overlay · ? help.
 
