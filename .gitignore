@@ -11,6 +11,11 @@ taping_test_*.json
 taping_sample*.json
 Taping Cam27/
 
+# GT labeling clips (video files too big — but track the labels JSON sidecars)
+gt_clips/*.mp4
+gt_clips/*.v2_detections.json
+# Tracked: gt_clips/*.labels.json (the actual ground-truth output we want versioned)
+
 # Frames and video data
 frames/
 

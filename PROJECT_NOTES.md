@@ -305,6 +305,39 @@ These go on scale (peak_diff: 39.7, 83.6, 60.4, 56.9) then get rejected by weigh
 
 ---
 
+## CH27 GT Labeling Tool (`gt_labeler.py`, May 2026)
+
+After v3's optical-flow plumbing failed to push F1 past 0.85 (signal too noisy
+in the air zone — worker arm follow-through dominates), the bottleneck became
+**how much labeled data we have**, not algorithm tuning. Built a frame-accurate
+Tkinter labeler so we can collect 150–250 events from 3 diverse 5-min clips
+and train a pulse-shape classifier (CH27 v4).
+
+### Key design points
+- **Pre-population** from v2 (cached to `<video>.v2_detections.json` so the
+  expensive run happens once per clip). Labeler reviews/confirms instead of
+  transcribing from scratch — ~3× speed-up.
+- **Sidecar JSON** (`<video>.labels.json`) is the persistence format. Schema
+  matches what the future classifier-training script will consume directly.
+- Each label carries `source: "manual"|"v2_auto"` and `confirmed: bool`. The
+  classifier-training pipeline can use **deleted v2-auto labels as negative
+  training examples** — great signal.
+- A/D for load/toss · Tab to toggle active table · Frame-accurate stepping with
+  arrow keys (Shift = ±1s, Up/Down = ±5s).
+
+### Three priority clips (already extracted to `gt_clips/`)
+| File | Wall clock | Why |
+|---|---|---|
+| `gt_clip1_morning.mp4`   | 10:35–10:40 | Peak production, both tables busy, includes restock pattern |
+| `gt_clip2_prelunch.mp4`  | 12:25–12:30 | Pre-lunch slowdown — captures break edges |
+| `gt_clip3_postlunch.mp4` | 14:15–14:20 | Post-break first-tosses (current weak spot in v2) |
+
+After labeling all three (~90 min user time), we'll have ~200 events spanning
+peak/slowdown/recovery — enough to train a RandomForest pulse classifier and
+ship CH27 v4.
+
+---
+
 ## CH27 Taping Counter — v2 (May 2026, precision-tuned via 5-min GT clip)
 
 User flagged v1 was not "airtight" — needed precision/recall jump. Built a

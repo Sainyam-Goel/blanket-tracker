@@ -120,6 +120,27 @@ python3 taping_counter.py /path/to/ch27_video.mp4 --version v1 --frame-step 2  #
 python3 taping_roi_calibrator.py /path/to/sample_frame.png  # writes annotated PNG
 ```
 
+**Label ground truth for the classifier (gt_labeler.py):**
+```bash
+python3 gt_labeler.py path/to/clip.mp4
+```
+Frame-accurate labeling tool. Pre-populates suggested toss events from the v2
+algorithm; you confirm/edit/delete and add missed events. Output: sidecar
+`<clip>.labels.json` next to the video.
+
+Keyboard: ←/→ step ±1 frame · Shift+←/→ step ±1 s · Space play · Tab
+toggle active table (LEFT↔RIGHT) · **A** mark load · **D** mark toss ·
+Enter edit note · Backspace delete · Cmd+S save · Cmd+Z undo · R toggle ROI
+overlay · ? help.
+
+Pre-extracted 5-min training clips live in `gt_clips/`:
+- `gt_clip1_morning.mp4`   (10:35 wall clock — peak production)
+- `gt_clip2_prelunch.mp4`  (12:25 — slowdown into lunch)
+- `gt_clip3_postlunch.mp4` (14:15 — post-lunch ramp-up)
+
+Label all three (~30 min each) and the resulting `*.labels.json` files feed
+the classifier-training script (planned `train_taping_classifier.py`).
+
 **Generate dashboard:**
 ```bash
 python3 generate_dashboard.py
