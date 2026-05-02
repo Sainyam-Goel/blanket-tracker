@@ -385,12 +385,12 @@ def run_ch27(videos, frame_step=1, version="v2"):
             "duration_sec": round(total_duration, 2),
             "total_frames": total_frames,
             "processing_time_sec": round(total_processing, 2),
-            "version": "v1",
+            "version": version,
             "generated_at": datetime.now().isoformat(),
         },
         "segments": segment_info,
         "config": {
-            "note": "See taping_counter.py V1_CONFIG"
+            "note": f"See taping_counter.py V{version[1].upper()}_CONFIG"
         },
         "summary": {
             "total_cycles": len(all_events),
