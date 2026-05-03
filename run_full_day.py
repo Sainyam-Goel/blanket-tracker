@@ -295,7 +295,6 @@ def run_ch27(videos, frame_step=1, version="v2"):
     all_breaks = []
     all_suppressed = []
     all_frame_data = []
-    all_heap_trace = []
     total_duration = 0.0
     total_frames = 0
     total_processing = 0.0
@@ -341,12 +340,6 @@ def run_ch27(videos, frame_step=1, version="v2"):
             fd["time_sec"] = round(fd["time_sec"] + total_duration, 2)
             fd["frame"] = fd["frame"] + total_frames
             all_frame_data.append(fd)
-
-        # Offset heap_trace
-        for ht in results.get("heap_trace", []):
-            ht["time_sec"] = round(ht["time_sec"] + total_duration, 2)
-            ht["frame"] = ht["frame"] + total_frames
-            all_heap_trace.append(ht)
 
         L = sum(1 for e in results["events"] if e.get("table") == "left")
         R = sum(1 for e in results["events"] if e.get("table") == "right")
@@ -408,7 +401,6 @@ def run_ch27(videos, frame_step=1, version="v2"):
         "breaks": all_breaks,
         "suppressed_candidates": all_suppressed,
         "frame_data": all_frame_data[::4],   # ~5Hz × ¼ ≈ 1.25Hz, ~40k samples for 9hr
-        "heap_trace": all_heap_trace,
     }
 
     print(f"\n{'='*70}")

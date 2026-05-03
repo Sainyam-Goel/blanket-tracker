@@ -2,6 +2,137 @@
 
 ---
 
+# ✅ CH27 v4.1 SHIPPED (2026-05-03 — full-day with expanded data, new ROIs, frozen baseline, per-table classifiers)
+
+## Headline Result
+
+**Full-day v4.1: 4,186 cycles** (L=1,896, R=2,290) over 9.0 hours.
+Processing: 53 min @ 254 fps (10.2× realtime). Output: 97 MB (10× smaller than v4).
+
+| Metric | v4.1 (NEW) | v2 (old) | v4 (old over-count) |
+|---|---|---|---|
+| Total cycles | 4,186 | 1,887 | 3,823 |
+| LEFT | 1,896 | 1,056 | 2,182 |
+| RIGHT | 2,290 | 831 | 1,641 |
+| Median duration | 6.6s | 7.4s | 2.7s |
+| Suppressed | 21,843 | 0 | 17,069 |
+| Speed | 10.2× realtime | — | 5.3× realtime |
+| Processing time | 53 min | — | 101 min |
+
+## What Changed (v4 → v4.1)
+
+### New Labeled Data (+100 toss windows)
+Expanded from 4 to 8 labeled clips (162 → 262 toss windows), nearly doubling LEFT training data:
+- clip1–4: original active-production clips (162 toss windows)
+- clip5 (end-of-day 18:45): break/idle — 0 tosses, 2 labels (pure negatives)
+- clip6 (lunch break 14:00): 22 toss windows (L=1, R=21)
+- clip7 (post-lunch 13:03): workers eating lunch — 0 tosses (pure idle)
+- clip8 (late afternoon 17:10): 20 toss windows (L=20, R=0) — LEFT-only
+- clip9 (late morning 11:10): 58 toss windows (L=47, R=11) — biggest LEFT gain
+
+### Updated ROIs (user calibration via browser tool)
+Tighter table-surface rectangles and adjusted air zones from `roi_calibrator_web.py`:
+```python
+LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)    # was (200, 750, 780, 940)
+RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)   # was (1140, 720, 1750, 970)
+LEFT_AIR_ROI_V2    = (272, 472, 702, 722)      # was (240, 580, 740, 740)
+RIGHT_AIR_ROI_V2   = (1233, 567, 1637, 808)    # was (1180, 580, 1860, 720)
+```
+
+### Frozen Adaptive Baseline
+The v2 tracker's baseline buffers now only update from **empty-table** frames (signal < 1.5). Previously, baselines updated every frame, causing the "empty table" reference to drift toward blanket-covered values during sustained production. The frozen baseline keeps the empty-table reference accurate through long runs.
+
+### Per-Table Classifiers
+Separate RandomForest models for LEFT and RIGHT tables with independent decision thresholds:
+| Model | CV F1 | Threshold | Candidates (pos/neg) |
+|---|---|---|---|
+| LEFT | 0.852 ± 0.031 | 0.50 | 955 (185/770) |
+| RIGHT | 0.861 ± 0.039 | 0.44 | 1026 (193/833) |
+
+### Frame Data Parity Fix
+Critical bug found: the numpy ring buffer produced different features than the training pipeline because it only held 200 frames (past-only, no post-peak frames). Fixed by using a matching dict-format ring buffer (maxlen=3000) populated at full rate — guarantees bit-identical features to training.
+
+### Speed Optimizations (v4.1 → 2× faster than v4)
+- Dict ring buffer for classifier features (maxlen=3000, O(1) memory)
+- Output frame_data sampled at 10Hz (every 10th frame) instead of full rate — 10× smaller output (97MB vs 945MB)
+- Batch classifier (sklearn predict_proba on 50-candidate batches)
+- Cooldown enforced within batches (3s per table)
+- Numpy buffer removed (was causing feature divergence)
+- Heap sampling removed (never used for detection)
+- Conservative mode disabled (hurt recall)
+- Single-line progress bar with L/R counts + ETA
+
+## Accuracy (full-fit on 8 labeled clips, per-table classifiers)
+
+| Clip | Candidate F1 | TP/FP/FN |
+|---|---|---|
+| morning | 0.928 | 58/9/0 |
+| prelunch | 0.932 | 69/9/1 |
+| postlunch | 0.940 | 55/7/0 |
+| afternoon | 0.963 | 52/4/0 |
+| **Overall** | **0.940** | **234/29/1** |
+
+**Production test on morning clip:** 40 events (5L/35R) vs 41 GT — 97.5% of ground truth.
+
+**LOCO (honest generalization):** 0.823 mean F1 (was 0.66 on 4 clips).
+
+## Approaches Tried and Discarded
+
+| Approach | Result | Why Discarded |
+|---|---|---|
+| Dynamic conservative threshold | Hurt recall 36-65% on active hours | Disabled (boost=0.0) |
+| Hard-negative mining (3× weights) | Reduced OOF F1 0.788 → 0.699 | RF `class_weight=balanced` already handles |
+| Optical flow as feature | +0.012 F1 on RIGHT only, 7× slower | Not worth speed penalty |
+| Parallel multiprocessing (4 workers) | HEVC decode bottleneck, no speedup | Sequential is faster |
+| Numpy ring buffer for features | Caused feature divergence (10→4 events) | Replaced with dict ring buffer |
+| H.264 re-encoding for browser | 73MB → 540MB, unnecessary | HEVC plays fine in browser |
+
+## Quick Commands
+
+```bash
+# Train per-table classifiers
+python3 train_taping_classifier.py --per-table
+
+# Full-day run (sequential, ~53 min)
+python3 run_full_day.py --ch27-only --ch27-version v4
+
+# Test on single clip
+python3 taping_counter.py gt_clips/gt_clip1_morning.mp4 --version v4
+
+# ROI calibrator (browser)
+python3 roi_calibrator_web.py gt_clips/gt_clip1_morning.mp4
+
+# Browser labeler
+python3 gt_labeler_web.py gt_clips/<clip>.mp4
+
+# Regenerate dashboard
+python3 generate_dashboard.py && cp blanket_tracker_dashboard.html index.html
+```
+
+## Files Changed in v4.1
+
+**Modified:**
+- `taping_counter.py` — per-table classifiers, frozen baseline, batch classifier, ring buffer, progress bar, new ROIs, heap removed
+- `train_taping_classifier.py` — 8 clips, 13 features (flow removed), per-table training, threshold optimization
+- `run_full_day.py` — heap_trace removed, parallel runner available (unused)
+- `PROJECT_NOTES.md` — this update
+
+**New:**
+- `taping_pulse_classifier_toss_v4_left.pkl` — LEFT per-table model
+- `taping_pulse_classifier_toss_v4_right.pkl` — RIGHT per-table model
+- `classifier_metadata_left.json` / `classifier_metadata_right.json`
+- `roi_calibrator_web.py` — browser-based ROI drawing tool
+- `optimize_threshold.py` — threshold sweep utility
+- `threshold_optimization.json` — sweep results
+
+**New clips (gt_clips/):**
+- `gt_clip6_lunchbreak.mp4` / `.labels.json` — 22 toss windows
+- `gt_clip7_postlunch_return.mp4` / `.labels.json` — 0 tosses (idle)
+- `gt_clip8_afternoon.mp4` / `.labels.json` — 20 toss windows
+- `gt_clip9_latemorning.mp4` / `.labels.json` — 58 toss windows
+
+---
+
 # ✅ CH27 v4 SHIPPED (2026-05-03, after labeled-data classifier)
 
 ## Headline result

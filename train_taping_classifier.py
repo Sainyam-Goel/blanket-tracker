@@ -32,12 +32,16 @@ sys.path.insert(0, str(HERE))
 
 GT_DIR = HERE / "gt_clips"
 CLIPS_FOR_TRAINING = [
-    "gt_clip1_morning",
-    "gt_clip2_prelunch",
-    "gt_clip3_postlunch",
-    "gt_clip4_afternoon_dark",
+    "gt_clip1_morning",         # peak active, 41 toss windows
+    "gt_clip2_prelunch",        # slowdown, 48 toss windows
+    "gt_clip3_postlunch",       # post-lunch active, 37 toss windows
+    "gt_clip4_afternoon_dark",  # different SKU, 36 toss windows
+    "gt_clip5_endofday",        # break/idle, 0 tosses — valuable negatives
+    "gt_clip6_lunchbreak",      # lunch active, 22 toss windows
+    "gt_clip8_afternoon",       # late afternoon LEFT-heavy, 20 toss windows
+    "gt_clip9_latemorning",     # late morning LEFT-heavy, 58 toss windows
 ]
-CLIP_SKIP = ["gt_clip5_endofday"]  # only 2 stray labels — not enough to train on
+CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
 CLUSTER_GAP_FRAMES = 25       # ≤1s gap → same action window
 COVERAGE_TOL_SEC = 2.0        # GT cluster covered if v2 candidate within ±2s
@@ -155,7 +159,7 @@ def collect_candidates(clip_path, fps=25.0):
     from taping_counter import TapingCounter
 
     # Override: lowered thresholds, no cooldown/min_cycle/strong gates,
-    # context still permissive
+    # context still permissive, flow computation enabled as features
     counter = TapingCounter(
         str(clip_path),
         version="v2",
@@ -172,6 +176,8 @@ def collect_candidates(clip_path, fps=25.0):
         idle_to_conservative_sec=99999,  # never enter conservative mode
         # Frame data sampling at full rate so we have signals for feature extraction
         frame_data_every=1,
+        # v5: compute flow for classifier features
+        compute_flow_always=True,
     )
     results = counter.run()
     # The events list is what passed through v2's pulse-end logic; we want
@@ -605,6 +611,192 @@ def train_classifier(hold_out="gt_clip4_afternoon_dark", out_dir=HERE):
 
 
 # ─────────────────────────────────────────────────────────────────
+#  Phase 5: Per-table classifiers (LEFT / RIGHT trained separately)
+# ─────────────────────────────────────────────────────────────────
+
+PER_TABLE_OUT = {
+    "left":  "taping_pulse_classifier_toss_v4_left.pkl",
+    "right": "taping_pulse_classifier_toss_v4_right.pkl",
+}
+
+
+def train_per_table_classifiers(out_dir=HERE):
+    """Train separate RandomForest classifiers for LEFT and RIGHT tables.
+
+    Rationale: LEFT and RIGHT have different signal profiles (air-zone
+    geometry, worker handedness, blanket types). A single model compromises
+    both — the LEFT morning clip F1 drops to 0.50 while RIGHT achieves 0.94
+    under the full-fit single model. Separate classifiers fix this.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import StratifiedKFold, cross_val_score
+    from sklearn.metrics import (
+        precision_score, recall_score, f1_score, confusion_matrix,
+    )
+    import joblib
+
+    print("=" * 70)
+    print("  CH27 v4 — PER-TABLE CLASSIFIERS (LEFT / RIGHT separate)")
+    print("=" * 70)
+
+    # Build per-clip datasets and split by table
+    all_X = {"left": [], "right": []}
+    all_y = {"left": [], "right": []}
+    per_clip = {}
+
+    for clip in CLIPS_FOR_TRAINING:
+        res = build_dataset_for_clip(clip)
+        if res is None: continue
+        X, y, enriched = res
+        per_clip[clip] = (X, y, enriched)
+        for i, (cand, label) in enumerate(zip(enriched, y)):
+            tbl = cand.get("table", "")
+            if tbl in all_X:
+                all_X[tbl].append(X[i])
+                all_y[tbl].append(label)
+
+    for tbl in ["left", "right"]:
+        if not all_X[tbl]:
+            continue
+        X_tbl = np.array(all_X[tbl], dtype=float)
+        y_tbl = np.array(all_y[tbl], dtype=int)
+        n_pos = int(y_tbl.sum())
+        n_neg = len(y_tbl) - n_pos
+
+        print(f"\n{'='*50}")
+        print(f"  {tbl.upper()} TABLE")
+        print(f"  Dataset: {len(y_tbl)} candidates ({n_pos} pos, {n_neg} neg, "
+              f"{100*n_pos/max(1,len(y_tbl)):.1f}% pos)")
+        print(f"{'='*50}")
+
+        if n_pos < 3 or n_neg < 3:
+            print(f"  [skip] Not enough positive or negative samples")
+            continue
+
+        # CV
+        base_clf = RandomForestClassifier(
+            n_estimators=300, max_depth=8,
+            class_weight="balanced", random_state=42, n_jobs=-1,
+            min_samples_leaf=3,
+        )
+        cv = StratifiedKFold(n_splits=min(5, n_pos, n_neg), shuffle=True, random_state=42)
+        cv_f1 = cross_val_score(base_clf, X_tbl, y_tbl, cv=cv, scoring="f1")
+        cv_p = cross_val_score(base_clf, X_tbl, y_tbl, cv=cv, scoring="precision")
+        cv_r = cross_val_score(base_clf, X_tbl, y_tbl, cv=cv, scoring="recall")
+        print(f"  CV F1       : {cv_f1.mean():.3f} ± {cv_f1.std():.3f}")
+        print(f"  CV Precision: {cv_p.mean():.3f}")
+        print(f"  CV Recall   : {cv_r.mean():.3f}")
+
+        # Threshold tuning via OOF
+        from sklearn.model_selection import cross_val_predict
+        oof_prob = cross_val_predict(base_clf, X_tbl, y_tbl, cv=cv,
+                                       method="predict_proba", n_jobs=-1)[:, 1]
+        best_thresh, best_f1 = 0.5, 0.0
+        for th in np.arange(0.30, 0.81, 0.02):
+            yp = (oof_prob > th).astype(int)
+            if yp.sum() == 0: continue
+            f_ = f1_score(y_tbl, yp, zero_division=0)
+            if f_ > best_f1:
+                best_thresh, best_f1 = th, f_
+        print(f"  Best thresh: {best_thresh:.2f} → OOF F1={best_f1:.3f}")
+
+        # LOCO: leave-one-clip-out, return per-clip cluster-level F1
+        print(f"\n  Leave-one-clip-out:")
+        loco_clips = [c for c in CLIPS_FOR_TRAINING if c in per_clip]
+        loco_summary = {}
+        for hold in loco_clips:
+            if hold not in per_clip: continue
+            # Build test set from THIS clip only, same table
+            X_hold, y_hold, enriched_hold = per_clip[hold]
+            idx = [i for i, c in enumerate(enriched_hold) if c.get("table") == tbl]
+            if len(idx) < 2:
+                continue
+            X_te = X_hold[idx]
+            y_te = y_hold[idx]
+            train = [c for c in loco_clips if c != hold]
+            # Concatenate all train clips (same table only)
+            X_tr_rows, y_tr_rows = [], []
+            for c in train:
+                X_c, y_c, enriched_c = per_clip[c]
+                idx_tr = [i for i, cand in enumerate(enriched_c) if cand.get("table") == tbl]
+                if idx_tr:
+                    X_tr_rows.append(X_c[idx_tr])
+                    y_tr_rows.append(y_c[idx_tr])
+            if not X_tr_rows: continue
+            X_tr = np.concatenate(X_tr_rows)
+            y_tr = np.concatenate(y_tr_rows)
+
+            clf = RandomForestClassifier(
+                n_estimators=300, max_depth=8, min_samples_leaf=3,
+                class_weight="balanced", random_state=42, n_jobs=-1)
+            clf.fit(X_tr, y_tr)
+            y_pred = clf.predict(X_te)
+            p = precision_score(y_te, y_pred, zero_division=0)
+            r = recall_score(y_te, y_pred, zero_division=0)
+            f = f1_score(y_te, y_pred, zero_division=0)
+            # Cluster-level F1 per table
+            from optimize_threshold import score_clusters
+            probs = clf.predict_proba(X_te)[:, 1]
+            labels, clusters, fps = load_clip_gt(hold)
+            step_thresh = best_thresh
+            accepted = [enriched_hold[i] for i, ix in enumerate(idx) if probs[i] > step_thresh]
+            preds = [c["time_sec"] for c in accepted]
+            cp, cr, cf, _, _, _ = score_clusters(preds, clusters, tbl, fps)
+            loco_summary[hold] = {"cand_f1": f, "cand_p": p, "cand_r": r,
+                                  "cluster_f1": cf, "cluster_p": cp, "cluster_r": cr}
+            print(f"    hold={hold:30s}  P={p:.3f} R={r:.3f} F1={f:.3f}  "
+                  f"cluster F1={cf:.3f}")
+
+        # Final fit on all data
+        print(f"\n  [final fit] on all {len(y_tbl)} {tbl} candidates")
+        clf = RandomForestClassifier(
+            n_estimators=300, max_depth=8,
+            class_weight="balanced", random_state=42, n_jobs=-1,
+            min_samples_leaf=3,
+        )
+        clf.fit(X_tbl, y_tbl)
+
+        # Feature importances
+        print(f"\n  Feature importances:")
+        imps = sorted(zip(FEATURE_NAMES, clf.feature_importances_), key=lambda x: -x[1])
+        for name, imp in imps:
+            bar = "█" * int(imp * 50)
+            print(f"    {name:32s}  {imp:.3f}  {bar}")
+
+        # Save
+        pkl_path = Path(out_dir) / PER_TABLE_OUT[tbl]
+        joblib.dump(clf, pkl_path, compress=3)
+        print(f"\n  [saved] {pkl_path}")
+
+        # Save per-table metadata
+        meta = {
+            "table": tbl,
+            "feature_names": FEATURE_NAMES,
+            "n_features": len(FEATURE_NAMES),
+            "trained_at": datetime.now().isoformat(),
+            "training_clips": CLIPS_FOR_TRAINING,
+            "n_samples": int(len(y_tbl)),
+            "n_positives": n_pos,
+            "n_negatives": n_neg,
+            "cv_f1_mean": float(cv_f1.mean()),
+            "cv_f1_std": float(cv_f1.std()),
+            "cv_precision_mean": float(cv_p.mean()),
+            "cv_recall_mean": float(cv_r.mean()),
+            "feature_importances": dict(zip(
+                FEATURE_NAMES, [float(x) for x in clf.feature_importances_])),
+            "model": "RandomForestClassifier(n_estimators=300, max_depth=8, "
+                     "min_samples_leaf=3, class_weight='balanced', random_state=42)",
+            "decision_threshold": float(best_thresh),
+            "loco_summary": loco_summary,
+        }
+        meta_path = Path(out_dir) / f"classifier_metadata_{tbl}.json"
+        meta_path.write_text(json.dumps(meta, indent=2))
+        print(f"  [saved] {meta_path}")
+
+    return
+
+
+# ─────────────────────────────────────────────────────────────────
 #  Phase 4 helpers: v2 baseline + leave-one-clip-out CV
 # ─────────────────────────────────────────────────────────────────
 
@@ -717,6 +909,8 @@ def main():
                              "report F1 vs GT clusters")
     parser.add_argument("--loco", action="store_true",
                         help="Leave-one-clip-out CV (honest per-clip generalization)")
+    parser.add_argument("--per-table", action="store_true",
+                        help="Train separate classifiers for LEFT and RIGHT tables")
     args = parser.parse_args()
 
     clips = [args.clip] if args.clip else CLIPS_FOR_TRAINING
@@ -767,6 +961,10 @@ def main():
 
     if args.loco:
         run_leave_one_clip_out()
+        return
+
+    if args.per_table:
+        train_per_table_classifiers()
         return
 
     # Default: train the classifier

@@ -45,19 +45,28 @@ labeler pre-populate suggested tosses. They are not manual ground truth.
 | 2 | `gt_clip2_prelunch.mp4` | 12:25-12:30 | Pre-lunch slowdown and break-edge behavior |
 | 3 | `gt_clip3_postlunch.mp4` | 14:15-14:20 | Post-lunch ramp-up and first-toss weakness |
 | 4 | `gt_clip4_afternoon_dark.mp4` | 15:30-15:35 | Afternoon/darker blanket SKU variation |
-| 5 | `gt_clip5_endofday.mp4` | 18:45-18:50 | End-of-day slower/casual motion patterns |
+| 5 | `gt_clip5_endofday.mp4` | 18:45-18:50 | End-of-day break — 0 tosses, 2 heap movements (negatives) |
+| 6 | `gt_clip6_lunchbreak.mp4` | 14:00-14:05 | Lunch break active — 22 toss windows (L=1, R=21) |
+| 7 | `gt_clip7_postlunch_return.mp4` | 13:03-13:08 | Workers eating lunch — 0 tosses (pure idle, negatives) |
+| 8 | `gt_clip8_afternoon.mp4` | 17:10-17:15 | Late afternoon — 20 toss windows (L=20, R=0, LEFT-only) |
+| 9 | `gt_clip9_latemorning.mp4` | 11:10-11:15 | Late morning — 58 toss windows (L=47, R=11, biggest LEFT gain) |
 
 ## Current Saved Labels
 
-As of the last review:
+As of v4.1 (2026-05-03):
 
-| File | Status |
-|---|---|
-| `gt_clip1_morning.labels.json` | Saved |
-| `gt_clip2_prelunch.labels.json` | Saved |
-| `gt_clip3_postlunch.labels.json` | Saved |
-| `gt_clip4_afternoon_dark.labels.json` | Saved after cleanup and resumed labeling |
-| `gt_clip5_endofday.labels.json` | Not yet saved unless created later |
+| File | Status | Toss Windows |
+|---|---|---|
+| `gt_clip1_morning.labels.json` | Saved | 41 (L=5, R=36) |
+| `gt_clip2_prelunch.labels.json` | Saved | 48 (L=22, R=26) |
+| `gt_clip3_postlunch.labels.json` | Saved | 37 (L=6, R=31) |
+| `gt_clip4_afternoon_dark.labels.json` | Saved | 36 (L=27, R=9) |
+| `gt_clip5_endofday.labels.json` | Saved | 0 (break/idle) |
+| `gt_clip6_lunchbreak.labels.json` | Saved | 22 (L=1, R=21) |
+| `gt_clip7_postlunch_return.labels.json` | Saved | 0 (workers eating) |
+| `gt_clip8_afternoon.labels.json` | Saved | 20 (L=20, R=0) |
+| `gt_clip9_latemorning.labels.json` | Saved | 58 (L=47, R=11) |
+| **TOTAL** | | **262 (L=128, R=134)** |
 
 ## Clip 4 Cleanup Note
 

@@ -75,15 +75,13 @@ RIGHT_TABLE_ROI = (1280, 700, 1860, 1000)
 HEAP_ROI        = (700, 350, 1220, 750)   # validation-only
 
 # v2 ROIs — tight to actual table SURFACE only, calibrated against the empty-state
-# frame at t=280s of the GT clip (10:24:53). MOG2 background subtraction needs the
-# ROI to be dominated by table surface, not surrounding floor or workers, so the
-# foreground-area signal cleanly tracks blanket presence.
-LEFT_TABLE_ROI_V2  = (200, 750, 780, 940)
-RIGHT_TABLE_ROI_V2 = (1140, 720, 1750, 970)
+# frame at t=280s of the GT clip (10:24:53). Updated 2026-05-03 via roi_calibrator_web.py.
+LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
+RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
 # Air zone above each table — narrow horizontal strip where a tossed blanket
 # appears momentarily. Used as a confirmation signal in v2.
-LEFT_AIR_ROI_V2  = (240, 580, 740, 740)
-RIGHT_AIR_ROI_V2 = (1180, 580, 1860, 720)
+LEFT_AIR_ROI_V2  = (272, 472, 702, 722)
+RIGHT_AIR_ROI_V2 = (1233, 567, 1637, 808)
 
 TAPE_DISPENSER_LEFT_ROI  = (0, 750, 120, 950)     # legacy / unused
 TAPE_DISPENSER_RIGHT_ROI = (1800, 750, 1920, 950) # legacy / unused
@@ -201,7 +199,8 @@ V2_CONFIG = {
     # have magnitude > min_flow_magnitude — otherwise reject as worker
     # walking-through, helper movement, or other non-toss motion.
     "use_flow_gate": False,    # DISABLED — see CH27 v3 notes in PROJECT_NOTES.md
-                               # Tested empirically on the 5-min GT clip and the
+    "compute_flow_always": False,  # v4 feature mode: compute flow but don't gate
+                                # Tested empirically on the 5-min GT clip and the
                                # air-zone optical flow turned out to be dominated
                                # by worker arm follow-through (DOWN motion) rather
                                # than the brief blanket trajectory. Plumbing kept
@@ -630,11 +629,16 @@ class _TableTrackerV2:
                            else cfg["air_toss_thresh_right"])
 
         # Baseline buffers (rolling raw mean and std)
+        # Rolling baseline buffers (raw mean and std).
+        # FROZEN during loaded states — only update from empty-table frames.
+        # This prevents the empty-table reference from drifting toward
+        # blanket-covered values during sustained activity.
         self.mean_buffer = deque(maxlen=int(cfg["baseline_window_sec"] * fps))
         self.std_buffer  = deque(maxlen=int(cfg["baseline_window_sec"] * fps))
         self.mean_baseline = 0.0
         self.std_baseline = 0.0
         self._baseline_tick = 0
+        self._baseline_empty_max_signal = 1.5  # signal below this = likely empty
 
         # State
         self.state = "empty"
@@ -686,29 +690,35 @@ class _TableTrackerV2:
         smoothed_mean = float(np.mean(self.mean_smooth_buf))
         smoothed_std  = float(np.mean(self.std_smooth_buf))
 
-        # Rolling baseline buffers + recompute every N frames
-        self.mean_buffer.append(raw_mean)
-        self.std_buffer.append(raw_std)
-        self._baseline_tick += 1
-        if self._baseline_tick >= self.cfg["baseline_recompute_every"]:
-            self._baseline_tick = 0
-            self.mean_baseline = float(np.percentile(
-                np.fromiter(self.mean_buffer, dtype=float),
-                self.cfg["mean_baseline_pctl"]))
-            self.std_baseline = float(np.percentile(
-                np.fromiter(self.std_buffer, dtype=float),
-                self.cfg["std_baseline_pctl"]))
-        if not self.mean_baseline:
-            self.mean_baseline = raw_mean
-        if not self.std_baseline:
-            self.std_baseline = raw_std
-
         # Combined signal — captures both dark blankets (mean drops) and patterned (std rises)
         signal = (max(0.0, self.mean_baseline - smoothed_mean)
                   + max(0.0, smoothed_std - self.std_baseline))
         self.last_signal = signal
         self.signal_history.append(signal)
         self.long_signal_history.append(signal)
+
+        # Adaptive baseline: only update from empty-table frames.
+        # When the table is loaded, we FROZEN the baseline buffers so the
+        # empty-table reference (bright, low-texture) stays accurate across
+        # long production runs and doesn't drift toward blanket values.
+        if signal < self._baseline_empty_max_signal:
+            self.mean_buffer.append(raw_mean)
+            self.std_buffer.append(raw_std)
+            self._baseline_tick += 1
+            if self._baseline_tick >= self.cfg["baseline_recompute_every"]:
+                self._baseline_tick = 0
+                if len(self.mean_buffer) > 0:
+                    self.mean_baseline = float(np.percentile(
+                        np.fromiter(self.mean_buffer, dtype=float),
+                        self.cfg["mean_baseline_pctl"]))
+                if len(self.std_buffer) > 0:
+                    self.std_baseline = float(np.percentile(
+                        np.fromiter(self.std_buffer, dtype=float),
+                        self.cfg["std_baseline_pctl"]))
+        if not self.mean_baseline:
+            self.mean_baseline = raw_mean
+        if not self.std_baseline:
+            self.std_baseline = raw_std
 
         # Air-zone motion (frame diff) — primary toss-event signal
         ax1, ay1, ax2, ay2 = self.air_roi
@@ -723,8 +733,8 @@ class _TableTrackerV2:
         cm = getattr(self, "_common_subtract", 0.0)
         self.last_air_motion = max(0.0, raw_motion - cm)
 
-        # Buffer downsampled air-ROI gray for optical-flow direction gate
-        if self.cfg.get("use_flow_gate", False):
+        # Buffer downsampled air-ROI gray for optical-flow (v3 gate / v4 feature)
+        if self.cfg.get("use_flow_gate", False) or self.cfg.get("compute_flow_always", False):
             target_size = self.cfg.get("flow_downsample", (160, 80))
             air_uint8 = (air if air.dtype == np.uint8
                          else air.clip(0, 255).astype(np.uint8))
@@ -837,13 +847,15 @@ class _TableTrackerV2:
                 state_ok = self.state != "break"
                 base_ok = ctx_max >= ctx_thresh and gap_ok and cyc_ok and state_ok
 
-                # Optical-flow direction gate (only if enabled and pulse looks
-                # primary). Soft-fail: if buffer empty, skip the gate.
+                # Optical-flow — always compute in v4 mode as classifier features.
+                # Never gate on it (v3 experiment showed it's noisy as a hard gate).
                 flow_ok = True
                 flow_info = None
-                if is_primary and base_ok and cfg.get("use_flow_gate", False):
+                compute_flow = (cfg.get("use_flow_gate", False)
+                                or cfg.get("compute_flow_always", False))
+                if base_ok and compute_flow:
                     flow_info = self._compute_toss_direction()
-                    if flow_info is not None:
+                    if flow_info is not None and cfg.get("use_flow_gate", False):
                         vx, vy, mag, ang = flow_info
                         flow_ok = self._direction_passes(ang, mag)
 
@@ -1024,7 +1036,8 @@ class TapingCounter:
                 "min_gap_sec":                  0.5,
                 "min_cycle_sec":                0.5,
                 "idle_to_conservative_sec":     99999,
-                "frame_data_every":             1,  # need full rate
+                "frame_data_every":             10,  # 0.4s sampling — output only, classifier uses v4_frame_buf
+                "compute_flow_always":          False,  # flow adds 7× slowdown, marginal F1 gain
             }
             for k, v in v4_overrides.items():
                 config[k] = v
@@ -1075,8 +1088,8 @@ class TapingCounter:
         self.events = []
         self.breaks = []
         self.suppressed = []
-        self.frame_data = []
-        self.heap_trace = []
+        self.frame_data = []   # output log — sampled at frame_data_every for dashboard
+        self.v4_frame_buf = deque(maxlen=3000)  # full-rate — 120s holds oldest batched candidate
 
         # Will be set in run()
         self.fps = 25.0
@@ -1096,68 +1109,295 @@ class TapingCounter:
         self.v4_feature_names = None
         self.v4_min_gap_sec = 3.0  # final cooldown AFTER classifier accepts
         self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
-        # Rolling per-frame data buffer for online feature extraction
-        # Holds the last N frames in the same dict shape as self.frame_data,
-        # so the SAME extract_features() function works at training and inference
-        self.v4_buf = deque(maxlen=200)  # 8s @ 25fps — plenty for 2s pre + 1.5s post window
+        # Dynamic threshold: if no high-confidence toss in the last N seconds,
+        # raise the classifier decision threshold (conservative mode).
+        # During active periods: air peaks ~9-10 typical. During breaks:
+        # air peaks ~5-6 — same as mid-cycle noise. The conservative lift
+        # ensures we only accept candidates with genuine toss-level peaks.
+        self.v4_conservative_window_sec = float(config.get("v4_conservative_window_sec", 30.0))
+        self.v4_conservative_air_thresh = float(config.get("v4_conservative_air_thresh", 7.0))
+        self.v4_conservative_threshold_boost = float(config.get("v4_conservative_threshold_boost", 0.0))
+        # Rolling per-frame data buffer for online feature extraction.
+        # v4.1: numpy ring buffer (shape (maxlen, 8)) instead of deque-of-dicts.
+        # Columns: frame, time_sec, left_mean, right_mean, left_signal,
+        #          right_signal, left_air_motion, right_air_motion
+        self.v4_buf = np.zeros((200, 8), dtype=np.float64)
+        self.v4_buf_idx = 0
+        self.v4_buf_count = 0
+        self.v4_batch_size = int(config.get("v4_batch_size", 50))
+        self.v4_pending = []  # batched candidates awaiting predict_proba
+        # Column index constants
+        self._BFRAME = 0
+        self._BTIME = 1
+        self._BLMEAN = 2
+        self._BRMEAN = 3
+        self._BLSIG = 4
+        self._BRSIG = 5
+        self._BLAIR = 6
+        self._BRAIR = 7
         if self.version == "v4":
             self._load_v4_classifier(config)
 
     # ── v4 classifier helpers ───────────────────────────────────
 
     def _load_v4_classifier(self, config):
-        """Load the trained pulse-shape classifier and feature spec."""
+        """Load the trained pulse-shape classifier(s) and feature spec.
+
+        If per-table .pkl files exist (Priority 3), loads separate classifiers
+        for LEFT and RIGHT tables. Otherwise falls back to the single combined
+        classifier (legacy v4).
+        """
         import joblib
         from pathlib import Path
-        pkl_path = config.get("v4_classifier_path",
-                               Path(__file__).resolve().parent
-                               / "taping_pulse_classifier_toss_v4.pkl")
-        meta_path = config.get("v4_metadata_path",
-                                Path(__file__).resolve().parent
-                                / "classifier_metadata.json")
-        if not Path(pkl_path).exists():
-            raise FileNotFoundError(
-                f"v4 classifier not found at {pkl_path}. "
-                "Run `python3 train_taping_classifier.py` first.")
-        self.v4_classifier = joblib.load(pkl_path)
-        if Path(meta_path).exists():
-            meta = json.loads(Path(meta_path).read_text())
-            self.v4_feature_names = meta["feature_names"]
-            self.v4_threshold = float(
-                meta.get("decision_threshold",
-                         config.get("v4_threshold", 0.5)))
+        base = Path(__file__).resolve().parent
+
+        # Check for per-table classifiers first
+        left_pkl = base / "taping_pulse_classifier_toss_v4_left.pkl"
+        right_pkl = base / "taping_pulse_classifier_toss_v4_right.pkl"
+        use_per_table = left_pkl.exists() and right_pkl.exists()
+
+        if use_per_table:
+            self.v4_classifier = {
+                "left":  joblib.load(left_pkl),
+                "right": joblib.load(right_pkl),
+            }
+            # Load thresholds from metadata
+            for tbl, fn in [("left", "classifier_metadata_left.json"),
+                            ("right", "classifier_metadata_right.json")]:
+                meta_path = base / fn
+                if meta_path.exists():
+                    meta = json.loads(meta_path.read_text())
+                    if tbl == "left":
+                        self.v4_threshold_left = float(
+                            meta.get("decision_threshold",
+                                     config.get("v4_threshold", 0.5)))
+                    else:
+                        self.v4_threshold_right = float(
+                            meta.get("decision_threshold",
+                                     config.get("v4_threshold", 0.5)))
+                else:
+                    if tbl == "left":
+                        self.v4_threshold_left = self.v4_threshold
+                    else:
+                        self.v4_threshold_right = self.v4_threshold
+
+            # Feature names from the LEFT metadata (both use same schema)
+            meta_left = base / "classifier_metadata_left.json"
+            if meta_left.exists():
+                meta = json.loads(meta_left.read_text())
+                self.v4_feature_names = meta["feature_names"]
+            if self.debug:
+                print(f"[v4] per-table classifiers loaded "
+                      f"(th_left={self.v4_threshold_left:.2f}, "
+                      f"th_right={self.v4_threshold_right:.2f})")
         else:
-            # Fallback feature order (must match training)
-            self.v4_feature_names = [
-                "peak_height", "peak_above_baseline",
-                "duration_above_thresh_sec", "rise_time_sec",
-                "decay_time_sec", "skewness", "auc_above_thresh",
-                "pre_peak_table_max", "post_peak_table_min", "table_drop",
-                "table_signal_at_peak", "simultaneous_air_other_table",
-                "air_diff_to_other",
-            ]
+            # Fallback: single combined classifier
+            pkl_path = config.get("v4_classifier_path",
+                                   base / "taping_pulse_classifier_toss_v4.pkl")
+            if not Path(pkl_path).exists():
+                raise FileNotFoundError(
+                    f"v4 classifier not found at {pkl_path}. "
+                    "Run `python3 train_taping_classifier.py` first.")
+            self.v4_classifier = joblib.load(pkl_path)
+            self.v4_threshold_left = self.v4_threshold
+            self.v4_threshold_right = self.v4_threshold
+            meta_path = config.get("v4_metadata_path",
+                                    base / "classifier_metadata.json")
+            if Path(meta_path).exists():
+                meta = json.loads(Path(meta_path).read_text())
+                self.v4_feature_names = meta["feature_names"]
+            else:
+                self.v4_feature_names = None
+            if self.debug:
+                print(f"[v4] single classifier loaded "
+                      f"(threshold={self.v4_threshold:.2f})")
+
         self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 3.0))
         if self.debug:
-            print(f"[v4] classifier loaded ({pkl_path.name}), "
-                  f"threshold={self.v4_threshold:.2f}, "
-                  f"min_gap={self.v4_min_gap_sec:.1f}s")
+            if isinstance(self.v4_classifier, dict):
+                print(f"[v4] per-table classifiers ready "
+                      f"(left_th={self.v4_threshold_left:.2f}, "
+                      f"right_th={self.v4_threshold_right:.2f}, "
+                      f"min_gap={self.v4_min_gap_sec:.1f}s)")
+            else:
+                print(f"[v4] single classifier ready "
+                      f"(th={self.v4_threshold:.2f}, "
+                      f"min_gap={self.v4_min_gap_sec:.1f}s)")
 
-    def _v4_classify_candidate(self, candidate):
+    def _v4_buf_to_dict_list(self):
+        """Convert numpy ring buffer to list of dicts for extract_features().
+
+        Returns entries in chronological order (oldest first).
+        """
+        n = self.v4_buf_count
+        if n == 0:
+            return []
+        buf = self.v4_buf
+        # Order: start from (idx % 200) for oldest if buffer has wrapped
+        if self.v4_buf_idx >= 200:
+            start = self.v4_buf_idx % 200
+            order = list(range(start, 200)) + list(range(0, start))
+        else:
+            order = list(range(n))
+        result = []
+        for i in order:
+            result.append({
+                "frame": int(buf[i, self._BFRAME]),
+                "time_sec": round(float(buf[i, self._BTIME]), 4),
+                "left_mean": float(buf[i, self._BLMEAN]),
+                "right_mean": float(buf[i, self._BRMEAN]),
+                "left_signal": float(buf[i, self._BLSIG]),
+                "right_signal": float(buf[i, self._BRSIG]),
+                "left_air_motion": float(buf[i, self._BLAIR]),
+                "right_air_motion": float(buf[i, self._BRAIR]),
+            })
+        return result
+
+    def _v4_flush_batch(self, current_frame=None):
+        """Batch-classify all pending candidates in one predict_proba call.
+
+        Uses v4_frame_buf (ring buffer, full-rate, same dict format as training)
+        for feature extraction — guarantees parity with the training pipeline.
+        """
+        if not self.v4_pending:
+            return
+        from train_taping_classifier import (extract_features, FEATURE_NAMES)
+
+        batch = self.v4_pending
+        self.v4_pending = []
+
+        if not batch:
+            return
+
+        feature_order = self.v4_feature_names or FEATURE_NAMES
+        buf_list = list(self.v4_frame_buf)  # same dict format as training
+        n_feat = len(feature_order)
+
+        # Extract features and build X matrix
+        X_rows = np.zeros((len(batch), n_feat), dtype=float)
+        for i, (payload, _) in enumerate(batch):
+            feats = extract_features(payload, buf_list)
+            for j, name in enumerate(feature_order):
+                X_rows[i, j] = feats.get(name, 0.0)
+
+        # Batch predict
+        tbls = [payload.get("table", "") for payload, _ in batch]
+        # Route to per-table or single classifier
+        if isinstance(self.v4_classifier, dict):
+            # Split by table, batch-predict each
+            probs = np.zeros(len(batch), dtype=float)
+            for tbl in ["left", "right"]:
+                mask = [t == tbl for t in tbls]
+                if any(mask):
+                    indices = [i for i, m in enumerate(mask) if m]
+                    clf = self.v4_classifier[tbl]
+                    probs[indices] = clf.predict_proba(
+                        X_rows[indices])[:, 1]
+        else:
+            probs = self.v4_classifier.predict_proba(X_rows)[:, 1]
+
+        # Process results
+        for i, (payload, _) in enumerate(batch):
+            tbl = payload.get("table", "")
+            prob = float(probs[i])
+            base_thresh = (self.v4_threshold_left if tbl == "left"
+                           else self.v4_threshold_right) if isinstance(
+                               self.v4_classifier, dict) else self.v4_threshold
+            eff_thresh = self._v4_conservative_threshold(
+                tbl, payload["time_sec"], base_thresh)
+            keep = prob > eff_thresh
+
+            payload["v4_prob"] = round(prob, 3)
+            payload["v4_eff_thresh"] = round(eff_thresh, 3)
+
+            if not keep:
+                self.suppressed.append({
+                    **payload,
+                    "reason": "classifier_reject",
+                })
+                continue
+
+            # Cooldown gate — enforce min_gap within same batch
+            prev_t = self.v4_last_emit_t[tbl]
+            if prev_t > 0 and (payload["time_sec"] - prev_t) < self.v4_min_gap_sec:
+                self.suppressed.append({
+                    **payload,
+                    "reason": "cooldown",
+                })
+                continue
+
+            # Accepted
+            payload["cycle_duration_sec"] = round(
+                max(0, payload["time_sec"] - max(0, prev_t)), 2)
+            self.v4_last_emit_t[tbl] = payload["time_sec"]
+            self.events.append(payload)
+            if self.debug:
+                thresh_str = (f" thr={eff_thresh:.2f}"
+                              if eff_thresh > base_thresh + 0.01 else "")
+                print(f"  [{payload['time_sec']:6.1f}s] toss {tbl:5s} "
+                      f"air_peak={payload['air_motion_peak']:.1f} "
+                      f"prob={prob:.2f}{thresh_str}")
+
+    def _v4_conservative_threshold(self, table_name, current_t, base_threshold=None):
+        """Return effective decision threshold for a table.
+
+        If no high-confidence toss (air peak ≥ conservative_air_thresh)
+        has been seen recently, raise the bar by conservative_threshold_boost.
+        This catches break-period noise where air peaks are lower but the
+        feature distribution overlaps with real tosses.
+        """
+        if base_threshold is None:
+            base_threshold = self.v4_threshold
+        tracker = self.left if table_name == "left" else self.right
+        # Check if a strong air pulse has occurred recently by scanning the
+        # rolling buffer for high air-motion spikes on this table
+        air_key = f"{table_name}_air_motion"
+        air_col = self._BLAIR if table_name == "left" else self._BRAIR
+        cutoff_t = current_t - self.v4_conservative_window_sec
+        has_strong_pulse = False
+        n = self.v4_buf_count
+        for i in range(n):
+            idx = (self.v4_buf_idx - 1 - i) % 200
+            t = self.v4_buf[idx, self._BTIME]
+            if t < cutoff_t:
+                break  # buffer is chronologically ordered backward from here
+            if self.v4_buf[idx, air_col] >= self.v4_conservative_air_thresh:
+                has_strong_pulse = True
+                break
+        if not has_strong_pulse:
+            return min(0.95, base_threshold + self.v4_conservative_threshold_boost)
+        return base_threshold
+
+    def _v4_classify_candidate(self, candidate, current_t):
         """Run the trained classifier on one v2-emitted candidate.
 
-        Returns (predicted_positive: bool, probability: float, features: dict).
+        Returns (predicted_positive: bool, probability: float, features: dict,
+        effective_threshold: float).
         Uses the SAME extract_features() function used at training time, so
         the inference signal pipeline is bit-identical to the training
         pipeline (no drift).
+
+        Routes to per-table classifier if available (Priority 3), otherwise
+        uses the single combined classifier (legacy v4).
         """
-        # Lazy import to avoid module-load cost for v1/v2
         from train_taping_classifier import extract_features, FEATURE_NAMES
-        feats = extract_features(candidate, list(self.v4_buf))
-        # Order features as the classifier expects
-        x = np.array([[feats[n] for n in (self.v4_feature_names or FEATURE_NAMES)]],
-                     dtype=float)
-        prob = float(self.v4_classifier.predict_proba(x)[0, 1])
-        return (prob > self.v4_threshold), prob, feats
+        feats = extract_features(candidate, self._v4_buf_to_dict_list())
+        tbl = candidate.get("table", "")
+        feature_order = self.v4_feature_names or FEATURE_NAMES
+        x = np.array([[feats[n] for n in feature_order]], dtype=float)
+
+        # Route to per-table classifier or combined
+        if isinstance(self.v4_classifier, dict):
+            clf = self.v4_classifier.get(tbl)
+            base_thresh = (self.v4_threshold_left if tbl == "left"
+                           else self.v4_threshold_right)
+        else:
+            clf = self.v4_classifier
+            base_thresh = self.v4_threshold
+
+        prob = float(clf.predict_proba(x)[0, 1])
+        eff_thresh = self._v4_conservative_threshold(tbl, current_t, base_thresh)
+        return (prob > eff_thresh), prob, feats, eff_thresh
 
     # ── Lighting helpers ────────────────────────────────────────
 
@@ -1242,7 +1482,7 @@ class TapingCounter:
 
         start = time.time()
         frame_idx = 0
-        progress_step = max(1, total_frames // 20) if total_frames > 0 else 1000
+        progress_step = max(1, total_frames // 50) if total_frames > 0 else 1000
 
         while True:
             # Frame skipping: grab() is faster than read() because it skips decode.
@@ -1313,20 +1553,26 @@ class TapingCounter:
                     ev = tracker.update(gray, frame_idx, t_sec, paused)
                     tracker_results.append(ev)
 
-                # v4: append rolling buffer row matching frame_data schema
+                # v4.1: populate ring buffer with training-identical dict format
                 if self.version == "v4":
-                    self.v4_buf.append({
+                    self.v4_frame_buf.append({
                         "frame": frame_idx,
-                        "time_sec": round(t_sec, 4),
-                        "left_mean":     self.left.last_mean,
-                        "right_mean":    self.right.last_mean,
-                        "left_signal":   self.left.last_signal,
-                        "right_signal":  self.right.last_signal,
-                        "left_air_motion":  self.left.last_air_motion,
-                        "right_air_motion": self.right.last_air_motion,
+                        "time_sec": round(t_sec, 2),
+                        "left_mean": round(self.left.last_mean, 2),
+                        "right_mean": round(self.right.last_mean, 2),
+                        "left_signal": round(self.left.last_signal, 2),
+                        "right_signal": round(self.right.last_signal, 2),
+                        "left_baseline": round(self.left.mean_baseline, 2),
+                        "right_baseline": round(self.right.mean_baseline, 2),
+                        "left_air_motion": round(self.left.last_air_motion, 2),
+                        "right_air_motion": round(self.right.last_air_motion, 2),
+                        "frame_luma": round(frame_luma, 2),
+                        "left_state": self.left.state,
+                        "right_state": self.right.state,
+                        "paused": paused,
                     })
 
-                # Now process emitted candidates
+                # Now process emitted candidates — batch-queued for predict_proba
                 for ev in tracker_results:
                     if ev is None:
                         continue
@@ -1335,37 +1581,21 @@ class TapingCounter:
                         continue
 
                     if self.version == "v4":
-                        # Classifier post-filter
-                        # Cooldown — drop candidates within v4_min_gap of the
-                        # last accepted toss on the same table
                         tbl = payload["table"]
+                        # Cooldown — drop candidates within v4_min_gap
                         if (payload["time_sec"] - self.v4_last_emit_t[tbl]
                                 < self.v4_min_gap_sec):
                             continue
-                        try:
-                            keep, prob, feats = self._v4_classify_candidate(payload)
-                        except Exception as ex:
-                            if self.debug:
-                                print(f"  [v4 ERR] {ex}")
-                            continue
-                        payload["v4_prob"] = round(prob, 3)
-                        if not keep:
-                            self.suppressed.append({
-                                **payload,
-                                "reason": "classifier_reject",
-                            })
-                            continue
-                        # Accepted by classifier
-                        payload["features"] = {k: round(v, 3) for k, v in feats.items()}
-                        self.v4_last_emit_t[tbl] = payload["time_sec"]
-
-                    self.events.append(payload)
-                    if self.debug:
-                        prob_str = (f" prob={payload['v4_prob']:.2f}"
-                                    if "v4_prob" in payload else "")
-                        print(f"  [{payload['time_sec']:6.1f}s] toss {payload['table']:5s} "
-                              f"air_peak={payload['air_motion_peak']:.1f} "
-                              f"ctx={payload['peak_signal']:.1f}{prob_str}")
+                        # Queue for batch classification
+                        self.v4_pending.append((payload, t_sec))
+                        if len(self.v4_pending) >= self.v4_batch_size:
+                            self._v4_flush_batch()
+                    else:
+                        self.events.append(payload)
+                        if self.debug:
+                            print(f"  [{payload['time_sec']:6.1f}s] toss "
+                                  f"{payload['table']:5s} "
+                                  f"air_peak={payload['air_motion_peak']:.1f}")
             else:
                 l_ret = self.left.update(gray, frame_idx, t_sec, paused)
                 r_ret = self.right.update(gray, frame_idx, t_sec, paused)
@@ -1394,18 +1624,10 @@ class TapingCounter:
                 self.left.update_baseline(gather_ok, l_ret[1], l_ret[2])
                 self.right.update_baseline(gather_ok, r_ret[1], r_ret[2])
 
-            # Heap sampling
-            if self.heap_roi and frame_idx % self.heap_sample_every == 0:
-                hx1, hy1, hx2, hy2 = self.heap_roi
-                hp = gray[hy1:hy2, hx1:hx2]
-                self.heap_trace.append({
-                    "time_sec": round(t_sec, 2),
-                    "frame": frame_idx,
-                    "mean": round(float(np.mean(hp)), 2),
-                    "std": round(float(np.std(hp)), 2),
-                })
+            # Heap sampling — removed (validation-only, never gated events)
 
-            # Frame data sampling (for dashboard signal chart)
+            # Frame data logging (output only — dashboard signal chart).
+            # Classifier uses v4_frame_buf (separate, full-rate ring buffer).
             if frame_idx % self.frame_data_every == 0:
                 if self.version in ("v2", "v4"):
                     self.frame_data.append({
@@ -1450,10 +1672,24 @@ class TapingCounter:
                 elapsed = time.time() - start
                 fps_proc = frame_idx / elapsed if elapsed > 0 else 0
                 eta = (total_frames - frame_idx) / fps_proc if fps_proc > 0 else 0
-                print(f"  {pct:5.1f}% | L={self.left_count():3d} R={self.right_count():3d} "
-                      f"| {fps_proc:.0f} fps | ETA {eta:.0f}s")
+                Lc = sum(1 for e in self.events if e.get("table") == "left")
+                Rc = sum(1 for e in self.events if e.get("table") == "right")
+                bar_len = 30
+                filled = int(bar_len * frame_idx / total_frames)
+                bar = "█" * filled + "░" * (bar_len - filled)
+                sys.stdout.write(
+                    f"\r  [{bar}] {pct:5.1f}% | L={Lc:4d} R={Rc:4d}"
+                    f" | {fps_proc:3.0f}fps | ETA {eta:5.0f}s  ")
+                sys.stdout.flush()
 
         cap.release()
+        # Clear progress bar line
+        if total_frames > 0:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        # Flush any remaining batched v4 candidates
+        if self.version == "v4":
+            self._v4_flush_batch()
         elapsed = time.time() - start
         return self._build_results(frame_idx, duration_sec, elapsed)
 
@@ -1530,7 +1766,6 @@ class TapingCounter:
             "breaks": self.breaks,
             "suppressed_candidates": self.suppressed,
             "frame_data": self.frame_data,
-            "heap_trace": self.heap_trace,
             "flow_rejected": (
                 getattr(self.left, "flow_rejected", []) +
                 getattr(self.right, "flow_rejected", [])
