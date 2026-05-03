@@ -878,8 +878,10 @@ class _TableTrackerV2:
                 self.air_pulse_peak_f = frame_idx
                 # Capture blob Y-centroid at this new peak
                 if air_fg_mask is not None:
+                    k = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                    cleaned = cv2.morphologyEx(air_fg_mask, cv2.MORPH_OPEN, k)
                     c, _ = cv2.findContours(
-                        air_fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     if c:
                         largest = max(c, key=cv2.contourArea)
                         M = cv2.moments(largest)
@@ -888,8 +890,13 @@ class _TableTrackerV2:
 
             # Blob tracking: extract contours from MOG2 foreground mask
             if air_fg_mask is not None:
+                # Morphological opening removes salt-and-pepper noise before
+                # contour extraction — prevents single noise pixels from
+                # inflating blob bounding boxes (aspect ratio, area).
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                cleaned = cv2.morphologyEx(air_fg_mask, cv2.MORPH_OPEN, kernel)
                 contours, _ = cv2.findContours(
-                    air_fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if contours:
                     largest = max(contours, key=cv2.contourArea)
                     area = float(cv2.contourArea(largest))

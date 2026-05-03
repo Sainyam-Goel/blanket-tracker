@@ -30,7 +30,7 @@
     "table_transition_var"
   ],
   "n_features": 27,
-  "trained_at": "2026-05-04T03:11:22.904420",
+  "trained_at": "2026-05-04T03:32:49.378430",
   "training_clips": [
     "gt_clip1_morning",
     "gt_clip2_prelunch",
@@ -41,46 +41,47 @@
     "gt_clip7_postlunch_return",
     "gt_clip8_afternoon",
     "gt_clip9_latemorning",
-    "gt_clip11_breakperiod"
+    "gt_clip11_breakperiod",
+    "gt_clip12_endofday"
   ],
-  "n_samples": 1118,
+  "n_samples": 1259,
   "n_positives": 250,
-  "n_negatives": 868,
-  "cv_f1_mean": 0.9028519793155786,
-  "cv_f1_std": 0.029262127025199428,
-  "cv_precision_mean": 0.8808868778280543,
+  "n_negatives": 1009,
+  "cv_f1_mean": 0.9083019974344879,
+  "cv_f1_std": 0.026519345963918778,
+  "cv_precision_mean": 0.8904210526315788,
   "cv_recall_mean": 0.9279999999999999,
   "feature_importances": {
-    "peak_height": 0.017675604671239853,
-    "peak_above_baseline": 0.010051289573311806,
-    "duration_above_thresh_sec": 0.020659012719988823,
-    "rise_time_sec": 0.018708426505327225,
-    "decay_time_sec": 0.01008082926273346,
-    "skewness": 0.01662144996225834,
-    "auc_above_thresh": 0.467384934425354,
-    "pre_peak_table_max": 0.008569844998419285,
-    "post_peak_table_min": 0.007315807044506073,
-    "table_drop": 0.04367204010486603,
-    "table_signal_at_peak": 0.012538326904177666,
-    "simultaneous_air_other_table": 0.01007908396422863,
-    "air_diff_to_other": 0.012374093756079674,
-    "color_R_drop": 0.03254082053899765,
-    "color_G_drop": 0.027691250666975975,
-    "color_B_drop": 0.019313812255859375,
-    "color_RG_ratio_peak": 0.01137850433588028,
-    "color_RB_ratio_peak": 0.010082272812724113,
-    "load_asymmetry": 0.02023984305560589,
-    "quadrant_LR_drop": 0.00612047640606761,
-    "quadrant_UR_peak": 0.016058748587965965,
-    "blob_max_area": 0.019215665757656097,
-    "blob_max_aspect": 0.03168611600995064,
-    "blob_trajectory_x": 0.014276620000600815,
-    "blob_y_centroid": 0.023238245397806168,
-    "table_solidity": 0.015760112553834915,
-    "table_transition_var": 0.09666674584150314
+    "peak_height": 0.010553964413702488,
+    "peak_above_baseline": 0.014583315700292587,
+    "duration_above_thresh_sec": 0.14237898588180542,
+    "rise_time_sec": 0.08324044197797775,
+    "decay_time_sec": 0.009492862969636917,
+    "skewness": 0.08243555575609207,
+    "auc_above_thresh": 0.285961776971817,
+    "pre_peak_table_max": 0.01891792006790638,
+    "post_peak_table_min": 0.01103662047535181,
+    "table_drop": 0.03443391993641853,
+    "table_signal_at_peak": 0.009211939759552479,
+    "simultaneous_air_other_table": 0.010010345838963985,
+    "air_diff_to_other": 0.009828225709497929,
+    "color_R_drop": 0.024500548839569092,
+    "color_G_drop": 0.007780983578413725,
+    "color_B_drop": 0.013606889173388481,
+    "color_RG_ratio_peak": 0.013637618161737919,
+    "color_RB_ratio_peak": 0.010539832524955273,
+    "load_asymmetry": 0.012965994887053967,
+    "quadrant_LR_drop": 0.007640914060175419,
+    "quadrant_UR_peak": 0.0158196073025465,
+    "blob_max_area": 0.011288193054497242,
+    "blob_max_aspect": 0.03041679412126541,
+    "blob_trajectory_x": 0.01686212606728077,
+    "blob_y_centroid": 0.01162461843341589,
+    "table_solidity": 0.009293690323829651,
+    "table_transition_var": 0.09193627536296844
   },
   "model": "XGBClassifier(n_estimators=300, max_depth=6)",
-  "decision_threshold": 0.7000000000000004,
+  "decision_threshold": 0.5800000000000003,
   "loco_summary": {
     "gt_clip1_morning": {
       "cand_f1": 0.7619047619047619,
@@ -91,28 +92,28 @@
       "cluster_r": 0.0
     },
     "gt_clip2_prelunch": {
-      "cand_f1": 0.9090909090909091,
-      "cand_p": 0.8823529411764706,
+      "cand_f1": 0.8695652173913043,
+      "cand_p": 0.8108108108108109,
       "cand_r": 0.9375,
-      "cluster_f1": 0.0281195079086116,
-      "cluster_p": 0.24242424242424243,
+      "cluster_f1": 0.028021015761821366,
+      "cluster_p": 0.22857142857142856,
       "cluster_r": 0.014925373134328358
     },
     "gt_clip3_postlunch": {
       "cand_f1": 0.9285714285714286,
       "cand_p": 0.9285714285714286,
       "cand_r": 0.9285714285714286,
-      "cluster_f1": 0.06250000000000001,
-      "cluster_p": 0.4166666666666667,
-      "cluster_r": 0.033783783783783786
+      "cluster_f1": 0.07407407407407408,
+      "cluster_p": 0.42857142857142855,
+      "cluster_r": 0.04054054054054054
     },
     "gt_clip4_afternoon_dark": {
       "cand_f1": 0.9662921348314607,
       "cand_p": 0.9772727272727273,
       "cand_r": 0.9555555555555556,
-      "cluster_f1": 0.031578947368421054,
-      "cluster_p": 0.2857142857142857,
-      "cluster_r": 0.016713091922005572
+      "cluster_f1": 0.03674540682414698,
+      "cluster_p": 0.3181818181818182,
+      "cluster_r": 0.019498607242339833
     },
     "gt_clip5_endofday": {
       "cand_f1": 0.0,
@@ -139,28 +140,36 @@
       "cluster_r": 0.0
     },
     "gt_clip8_afternoon": {
-      "cand_f1": 0.9375,
-      "cand_p": 0.9090909090909091,
-      "cand_r": 0.967741935483871,
-      "cluster_f1": 0.004140786749482401,
-      "cluster_p": 0.03225806451612903,
+      "cand_f1": 0.9180327868852459,
+      "cand_p": 0.9333333333333333,
+      "cand_r": 0.9032258064516129,
+      "cluster_f1": 0.004149377593360996,
+      "cluster_p": 0.03333333333333333,
       "cluster_r": 0.0022123893805309734
     },
     "gt_clip9_latemorning": {
-      "cand_f1": 0.8520710059171598,
-      "cand_p": 0.7659574468085106,
-      "cand_r": 0.96,
-      "cluster_f1": 0.10741138560687431,
-      "cluster_p": 0.5376344086021505,
-      "cluster_r": 0.059665871121718374
+      "cand_f1": 0.8439306358381503,
+      "cand_p": 0.7448979591836735,
+      "cand_r": 0.9733333333333334,
+      "cluster_f1": 0.11336898395721924,
+      "cluster_p": 0.5463917525773195,
+      "cluster_r": 0.06324582338902147
     },
     "gt_clip11_breakperiod": {
-      "cand_f1": 0.4,
+      "cand_f1": 0.3076923076923077,
       "cand_p": 1.0,
-      "cand_r": 0.25,
-      "cluster_f1": 0.010309278350515464,
-      "cluster_p": 0.4444444444444444,
-      "cluster_r": 0.005215123859191656
+      "cand_r": 0.18181818181818182,
+      "cluster_f1": 0.012903225806451615,
+      "cluster_p": 0.625,
+      "cluster_r": 0.00651890482398957
+    },
+    "gt_clip12_endofday": {
+      "cand_f1": 0.0,
+      "cand_p": 0.0,
+      "cand_r": 0.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
     }
   }
 }

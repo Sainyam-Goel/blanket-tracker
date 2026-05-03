@@ -42,6 +42,7 @@ CLIPS_FOR_TRAINING = [
     "gt_clip8_afternoon",          # late afternoon LEFT-heavy, 20 toss windows
     "gt_clip9_latemorning",        # late morning LEFT-heavy, 58 toss windows
     "gt_clip11_breakperiod",       # break period with noted FPs (heap move, counting)
+    "gt_clip12_endofday",          # end-of-day RIGHT-only (374 tosses R, 0 L)
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
@@ -769,6 +770,7 @@ def _make_clf(n_pos, n_neg, classifier="xgb"):
     elif classifier == "xgb":
         return xgb.XGBClassifier(
             n_estimators=300, max_depth=6, learning_rate=0.05,
+            colsample_bytree=0.7, min_child_weight=3,
             scale_pos_weight=n_neg / max(1, n_pos),
             objective="binary:logistic", eval_metric="logloss",
             random_state=42, n_jobs=-1, verbosity=0,
