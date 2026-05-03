@@ -2,6 +2,145 @@
 
 ---
 
+# ✅ CH27 v4.5 — Spatial Features + Hyperparameter Tuning (2026-05-04)
+
+## Headline
+
+**XGBoost at 0.920 (LEFT=0.908, RIGHT=0.931).** 11 labeled clips, 27 features, 36 total evaluated across 4 iterations. Feature space exhausted — remaining gains are classifier config + data volume.
+
+| Model | CV F1 | σ | Features | Threshold | Samples (pos/neg) |
+|---|---|---|---|---|---|
+| LEFT | **0.908** | ±0.027 | 27 | 0.58 | 1,259 (250/1,009) |
+| RIGHT | **0.931** | ±0.019 | 27 | 0.64 | 1,360 (309/1,051) |
+| **Avg** | **0.920** | | | | |
+
+## Architecture
+
+- **Classifier:** XGBoost (n_estimators=300, max_depth=6, learning_rate=0.05, colsample_bytree=0.7, min_child_weight=3, scale_pos_weight=auto)
+- **CV:** 5-fold stratified, stable — σ < 3% of mean (no overfitting)
+- **Inference speed:** 122 fps (5× realtime) — MOG2 adds ~2× overhead vs 240 fps pure-1D
+- **Morphological opening:** 5×5 kernel on MOG2 mask before contour extraction — deletes salt-and-pepper noise
+
+## Feature Hierarchy (27 total, ranked by avg importance)
+
+| # | Feature | Avg Imp | LEFT | RIGHT | Category |
+|---|---|---|---|---|---|
+| 1 | `auc_above_thresh` | 0.277 | 0.286 | 0.268 | Air pulse shape |
+| 2 | `duration_above_thresh_sec` | 0.129 | 0.142 | 0.116 | Air pulse shape |
+| 3 | **`table_transition_var`** | **0.088** | **0.092** | **0.085** | **Overlap detector ★** |
+| 4 | `decay_time_sec` | 0.071 | 0.009 | 0.133 | Air pulse shape |
+| 5 | `rise_time_sec` | 0.052 | 0.083 | 0.021 | Air pulse shape |
+| 6 | `table_drop` | 0.051 | 0.034 | 0.068 | Table context |
+| 7 | `skewness` | 0.044 | 0.082 | 0.006 | Air pulse shape |
+| 8 | `blob_max_aspect` | 0.023 | 0.030 | 0.015 | Spatial |
+| 9 | `color_R_drop` | 0.021 | 0.025 | 0.018 | Color |
+| 10 | `color_B_drop` | 0.020 | 0.014 | 0.026 | Color |
+| 11 | `color_G_drop` | 0.018 | 0.008 | 0.029 | Color |
+| 12 | `pre_peak_table_max` | 0.017 | 0.019 | 0.016 | Table context |
+| 13 | `peak_above_baseline` | 0.016 | 0.015 | 0.017 | Air pulse shape |
+| 14 | `peak_height` | 0.015 | 0.011 | 0.020 | Air pulse shape |
+| 15 | `blob_trajectory_x` | 0.015 | 0.017 | 0.013 | Spatial |
+
+### Category Importance Distribution
+
+| Category (count) | Weight | Role |
+|---|---|---|
+| Air pulse shape (7) | 60.4% 🟢 | Dominant — duration, AUC, steepness |
+| Overlap detection (1) | 8.8% 🟡 | Single most important non-pulse feature |
+| Table context (4) | 9.0% 🟡 | Surface state before/after toss |
+| Color differentials (5) | 8.2% 🟡 | BGR hue changes (dark LEFT table) |
+| Spatial contour (5) | 7.1% 🟡 | MOG2 blob geometry |
+| Loading asymmetry (3) | 3.8% ⚪ | Right-side loading pattern |
+| Cross-table (2) | 2.6% ⚪ | Simultaneous motion rejection |
+
+## Spatial Features — What Each Catches
+
+Each of the 6 spatial features targets a specific factory-floor failure mode:
+
+| Feature | Problem it solves | Mechanism |
+|---|---|---|
+| `table_transition_var` | Simul. load/toss overlap — blanket B arrives before A leaves, table never empty | Max frame-to-frame derivative of table signal in peak window (numpy diff, <1μs) |
+| `blob_max_aspect` | Arm follow-through enters air ROI — creates toss-identical pulse | MOG2 contour bbox width/height (arm=3.0, blanket=1.0) |
+| `blob_y_centroid` | Heap organizer walks through — triggers sustained motion | MOG2 contour centroid Y at pulse peak (low=toss from table edge, high=walker) |
+| `blob_max_area` | Arm swing = small area vs blanket = large area | cv2.contourArea of largest MOG2 foreground blob |
+| `blob_trajectory_x` | Bulk restock dumps blankets from heap side | Contour centroid X movement (toss=+X away, restock=−X toward) |
+| `table_solidity` | Struggle with dark blanket — messy vs neat | OTSU threshold on table ROI → contour area/bbox area (ready=0.85, struggle=0.40) |
+
+## Training Data Coverage (11 labeled clips)
+
+| Clip | Time | Toss | L | R | Type |
+|---|---|---|---|---|---|
+| clip1_morning | 10:35-10:40 | 41 | 5 | 36 | Active |
+| clip2_prelunch | 12:25-12:30 | 48 | 22 | 26 | Active |
+| clip3_postlunch | 14:15-14:20 | 37 | 6 | 31 | Active |
+| clip4_afternoon_dark | 15:30-15:35 | 36 | 27 | 9 | Active |
+| clip5_endofday | 18:45-18:50 | 0 | 0 | 0 | Idle (negatives) |
+| clip6_lunchbreak | 14:00-14:05 | 22 | 1 | 21 | Active |
+| clip7_postlunch_return | 13:03-13:08 | 0 | 0 | 0 | Idle (workers eating) |
+| clip8_afternoon | 17:10-17:15 | 20 | 20 | 0 | LEFT-only active |
+| clip9_latemorning | 11:10-11:15 | 58 | 47 | 11 | LEFT-heavy |
+| clip11_breakperiod | 14:25-14:30 | 59 | 29 | 30 | Active + 2 noted FPs |
+| clip12_endofday | 18:55-19:00 | 14 | 0 | 14 | RIGHT-only |
+| **TOTAL** | | **335** | **157** | **178** | **9:00-19:00 fully covered** |
+
+**Unlabeled:** clip10 (morning start 09:10-09:15) — last uncovered clock hour.
+
+## LEFT vs RIGHT Asymmetry
+
+RIGHT leads by +0.023 F1 (0.931 vs 0.908):
+- **Air baseline noise:** LEFT 3.6 vs RIGHT 0.8 (4.5× higher background motion)
+- **Training data:** LEFT has fewer idle clips (2 vs 3 RIGHT — clip12 is RIGHT-only with 0 LEFT tosses)
+- **Spatial features help LEFT more** (7.9% importance vs 6.3% RIGHT) but RIGHT compensates with volume
+
+## Model Health
+
+- **CV stability:** σ = 2.9% LEFT, 2.0% RIGHT — no overfitting
+- **Class balance:** 4.0:1 LEFT, 3.4:1 RIGHT — handled by `scale_pos_weight=auto`
+- **Morphological opening:** 5×5 kernel before `findContours` — removes MOG2 salt-and-pepper noise
+- **Threshold health:** LEFT=0.58, RIGHT=0.64 — elevated (ideal ~0.50), meaning model still requires high confidence to reject FPs
+
+## Feature Engineering Exhaustion Report
+
+| Category | Count |
+|---|---|
+| Features **added** and kept | 27 |
+| Features **tested** and **reverted** | 9 |
+| Total evaluated | **36** across 4 iterations (v4.2→v4.5) |
+
+**Reverted features** (all added noise without signal):
+- Load-context (time_since_load, was_loaded_recently): redundant with `pre_peak_table_max`
+- Sub-peak count + peak steepness: no signal separation
+- fwhm_frames + blob_area_ratio: zero or marginal importance
+- Stacking (RF+XGB Voting): diluted XGBoost predictions
+- Gap ROIs: killed candidates (v2 thresholds tuned for table-top SNR)
+- Dynamic/conservative threshold: killed recall on active hours
+
+**Conclusion:** The 1D+2D hybrid feature space is saturated. Remaining F1 gains come from classifier hyperparameter tuning + more labeled data, NOT from new features.
+
+## Path from 0.920 → 0.950 (remaining gap: 0.030)
+
+| # | Lever | Est. Lift | Effort | Certainty |
+|---|---|---|---|---|
+| 1 | Hyperparameter sweep (colsample=0.6, max_depth=8, subsample=0.8) | +0.005-0.010 | 1 hr | HIGH |
+| 2 | Label clip10 (morning start 09:10-09:15) | +0.003-0.005 | 30 min | MEDIUM |
+| 3 | More LEFT idle data | +0.003-0.005 | 1 hr | MEDIUM |
+| 4 | Per-table feature selection (LEFT 18 feat color, RIGHT 13 feat gray) | +0.002-0.004 | 1 hr | MEDIUM |
+| 5 | **Second production day** | **+0.010-0.015** | 3-4 hrs | **VERY HIGH** |
+| **Combined** | | **+0.023-0.039** | **3 hrs** | **→ 0.943-0.959** |
+
+## F1 Journey
+
+```
+v4 baseline (RF, 4 clips):              0.872
+v4.2 all-frames matching (+30% data):    0.902  (+0.030)
+v4.3 XGBoost replaces RF:               0.907  (+0.005)
+v4.4 6 spatial features + clip11:       0.914  (+0.007)
+v4.5 hyperparams + morph + clip12:      0.920  (+0.006)
+                                            ↑
+                                   +0.048 total lift
+                                   0.030 to 0.950
+```
+
 # ✅ CH27 v4.4 — Spatial Features + clip11 + XGBoost 0.914 (2026-05-04)
 
 ## Headline
