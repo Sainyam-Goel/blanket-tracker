@@ -78,8 +78,13 @@ HEAP_ROI        = (700, 350, 1220, 750)   # validation-only
 # roi_calibrator_web.py (2026-05-03).
 LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
 RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
-# Air zone above each table — narrow horizontal strip where a tossed blanket
-# appears momentarily. Used as a confirmation signal in v2.
+# v2 ROIs — calibrated against the empty-state frame and user-tuned via
+# roi_calibrator_web.py (2026-05-03).
+LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
+RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
+# Air zone above each table — where blanket motion and worker arm movement
+# create detectable frame-to-frame differences. The air-motion thresholds
+# (LEFT=3.0, RIGHT=2.0) are tuned to this table-top geometry.
 LEFT_AIR_ROI_V2  = (272, 472, 702, 722)
 RIGHT_AIR_ROI_V2 = (1233, 567, 1637, 808)
 
@@ -652,6 +657,17 @@ class _TableTrackerV2:
         self.frames_break_low = 0
         self.last_load_start_t = -1.0   # when the last load cycle began
         self.last_load_end_t = -1.0     # when the last load cycle ended
+
+        # MOG2 background subtractor for air-zone spatial features
+        self.air_mog2 = cv2.createBackgroundSubtractorMOG2(
+            history=100, varThreshold=36, detectShadows=False)
+        self.air_mog2_warmed = False
+        # Blob tracking during pulses (reset at pulse start)
+        self.blob_start_centroid = None  # centroid (cx, cy) at pulse start
+        self.blob_max_area = 0.0
+        self.blob_max_aspect = 0.0
+        self.blob_trajectory_x = 0.0    # net X movement during pulse
+        self.blob_peak_y = 0.0           # Y-centroid at pulse peak
         self.in_air_pulse = False        # currently inside an air-motion pulse
         self.air_pulse_peak = 0.0
         self.air_pulse_peak_t = None
@@ -730,6 +746,12 @@ class _TableTrackerV2:
         else:
             raw_motion = 0.0
         self.prev_air_gray = air
+        # MOG2 foreground mask for spatial blob features.
+        # Learning rate = -1 (auto) during normal frames, 0 during pulses
+        # so the flying blanket doesn't become part of the background.
+        air_uint8 = air.astype(np.uint8) if air.dtype != np.uint8 else air
+        learn_rate = 0.0 if self.in_air_pulse else -1.0
+        air_fg_mask = self.air_mog2.apply(air_uint8, learningRate=learn_rate)
         # Subtract common-mode (synchronized HEVC keyframe artifact spikes both
         # tables; real tosses spike only one)
         cm = getattr(self, "_common_subtract", 0.0)
@@ -831,11 +853,60 @@ class _TableTrackerV2:
             self.air_pulse_peak_t = t_sec
             self.air_pulse_peak_f = frame_idx
             self._pulse_open_t = t_sec
+            # Reset blob tracking for this pulse
+            self.blob_max_area = 0.0
+            self.blob_max_aspect = 0.0
+            self.blob_start_centroid = None
+            self.blob_trajectory_x = 0.0
+            self.blob_peak_y = 0.0
+            # Compute table solidity at pulse start (ready blanket = tight rectangle)
+            tbl_x1, tbl_y1, tbl_x2, tbl_y2 = self.table_roi
+            tbl_roi = gray_frame[tbl_y1:tbl_y2, tbl_x1:tbl_x2]
+            _, tbl_bin = cv2.threshold(tbl_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            tbl_contours, _ = cv2.findContours(tbl_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            self.table_solidity = 0.0
+            if tbl_contours:
+                largest = max(tbl_contours, key=cv2.contourArea)
+                area = cv2.contourArea(largest)
+                x, y, w, h = cv2.boundingRect(largest)
+                bbox_area = max(1, w * h)
+                self.table_solidity = round(float(area / bbox_area), 3)
         elif self.in_air_pulse:
             if air_smoothed > self.air_pulse_peak:
                 self.air_pulse_peak = air_smoothed
                 self.air_pulse_peak_t = t_sec
                 self.air_pulse_peak_f = frame_idx
+                # Capture blob Y-centroid at this new peak
+                if air_fg_mask is not None:
+                    c, _ = cv2.findContours(
+                        air_fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    if c:
+                        largest = max(c, key=cv2.contourArea)
+                        M = cv2.moments(largest)
+                        if M["m00"] > 0:
+                            self.blob_peak_y = float(M["m01"] / M["m00"])
+
+            # Blob tracking: extract contours from MOG2 foreground mask
+            if air_fg_mask is not None:
+                contours, _ = cv2.findContours(
+                    air_fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if contours:
+                    largest = max(contours, key=cv2.contourArea)
+                    area = float(cv2.contourArea(largest))
+                    if area > self.blob_max_area:
+                        self.blob_max_area = area
+                    x, y, w, h = cv2.boundingRect(largest)
+                    aspect = float(w / max(1, h))
+                    if aspect > self.blob_max_aspect:
+                        self.blob_max_aspect = aspect
+                    M = cv2.moments(largest)
+                    if M["m00"] > 0:
+                        cx = float(M["m10"] / M["m00"])
+                        cy = float(M["m01"] / M["m00"])
+                        if self.blob_start_centroid is None:
+                            self.blob_start_centroid = (cx, cy)
+                        else:
+                            self.blob_trajectory_x = cx - self.blob_start_centroid[0]
             # PULSE-TIMEOUT — force-close if open too long without natural drop
             pulse_age = t_sec - self._pulse_open_t
             timeout_hit = pulse_age >= cfg.get("pulse_timeout_sec", 1.5)
@@ -989,6 +1060,12 @@ class _TableTrackerV2:
             # Load context — was the table recently loaded?
             "last_load_start_t": self.last_load_start_t,
             "last_load_end_t": self.last_load_end_t,
+            # Spatial blob features from MOG2 foreground contours
+            "blob_max_area": round(self.blob_max_area, 1),
+            "blob_max_aspect": round(self.blob_max_aspect, 3),
+            "blob_trajectory_x": round(self.blob_trajectory_x, 2),
+            "blob_peak_y": round(self.blob_peak_y, 1),
+            "table_solidity": self.table_solidity,
         }
         if flow is not None:
             vx, vy, mag, ang = flow

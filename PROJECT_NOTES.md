@@ -2,6 +2,56 @@
 
 ---
 
+# ✅ CH27 v4.4 — Spatial Features + clip11 + XGBoost 0.914 (2026-05-04)
+
+## Headline
+
+**6 spatial contour features + table_transition_var push XGBoost from 0.907 → 0.914.**
+10 labeled clips, 27 features, LEFT=0.903, RIGHT=0.925.
+
+| Model | CV F1 | Features | Threshold |
+|---|---|---|---|
+| LEFT | **0.903** ± 0.029 | 27 | 0.70 |
+| RIGHT | **0.925** ± 0.041 | 27 | 0.72 |
+| **Avg** | **0.914** | | |
+
+## Spatial Features (v4.4 — breakthrough)
+
+MOG2 background subtraction on air ROIs during pulse windows gives 6 features:
+
+| Feature | Importance (L/R) | What it catches |
+|---|---|---|
+| **table_transition_var** | 0.097 / 0.065 | Simultaneous load/toss overlap — #1 LEFT feature! |
+| blob_max_aspect | 0.032 / 0.016 | Arm (thin, ~3.0) vs blanket (square, ~1.0) |
+| blob_y_centroid | 0.023 / 0.022 | Heap organizer (high) vs table-edge toss (low) |
+| blob_max_area | 0.019 / 0.014 | Blanket (big) vs arm (small) |
+| table_solidity | 0.016 / 0.019 | Ready-to-toss rectangle vs messy struggle |
+| blob_trajectory_x | 0.014 / 0.016 | Toss (+x toward heap) vs restock (-x toward table) |
+
+## What Changed (v4.3 → v4.4)
+
+- **clip11 added** (break period, 1,566 toss labels, 95 pos candidates)
+- **MOG2 background subtractor** on air ROIs (history=100, varThreshold=36)
+- **6 spatial contour features** extracted during pulse windows
+- **table_transition_var** captures the overlap scenario where blanket B loads before A leaves
+- **Tried and reverted:** fwhm_frames (noise), blob_area_ratio (zero importance), gap ROIs (killed candidates)
+
+## Speed
+
+MOG2 adds ~2× overhead (122 fps vs 240 fps). Still 5× realtime.
+Pipeline unchanged otherwise — same feature extraction, same batch classifier.
+
+## F1 Journey
+
+```
+0.872 → 0.902 → 0.907 → 0.914
+  RF   +frames  +XGB   +spatial
+```
+
+Next target: 0.95. Remaining gap: 0.036. Requires more labeled data or YOLO.
+
+---
+
 # ✅ CH27 v4.3 — XGBoost + Feature Engineering (2026-05-03)
 
 ## Headline

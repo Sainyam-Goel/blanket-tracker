@@ -41,6 +41,7 @@ CLIPS_FOR_TRAINING = [
     "gt_clip7_postlunch_return",   # idle — workers eating lunch, 0 tosses
     "gt_clip8_afternoon",          # late afternoon LEFT-heavy, 20 toss windows
     "gt_clip9_latemorning",        # late morning LEFT-heavy, 58 toss windows
+    "gt_clip11_breakperiod",       # break period with noted FPs (heap move, counting)
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
@@ -80,6 +81,15 @@ FEATURE_NAMES = [
     "load_asymmetry",     # LR quadrant signal minus LL (right side loads first)
     "quadrant_LR_drop",   # signal drop in lower-right quadrant (loading zone clears)
     "quadrant_UR_peak",   # upper-right quadrant peak — blanket presence above load zone
+    # Spatial contour features — MOG2 foreground blob geometry
+    "blob_max_area",      # largest contour area during pulse (blanket=big, arm=small)
+    "blob_max_aspect",    # max width/height ratio (blanket~1.0, arm~3.0)
+    "blob_trajectory_x",  # net X movement during pulse (+=toss toward heap, -=helper restock)
+    "blob_y_centroid",    # Y-position of centroid at peak (low=table edge, high=heap organizer)
+    # Table shape — ready-to-toss blanket = tight rectangle, struggle = messy blob
+    "table_solidity",     # contour_area / bbox_area at pre-peak (high=compact blanket, low=messy)
+    # Overlap detection — when blanket B loads before blanket A finishes leaving
+    "table_transition_var", # max frame-to-frame signal derivative (high=instability)
 ]
 
 
@@ -279,6 +289,25 @@ def _count_threshold_crossings(air_series, peak_idx, threshold):
     return crossings
 
 
+def _fwhm(series):
+    """Full-width at half-maximum — frames where signal stayed above 50% peak.
+
+    Thin spike (toss) ≈ 8-15 frames. Fat plateau (human walking) ≈ 30-50 frames.
+    """
+    if len(series) < 2:
+        return 0.0
+    peak = float(np.max(series))
+    if peak <= 0:
+        return 0.0
+    half = peak * 0.5
+    above = series > half
+    if not above.any():
+        return 0.0
+    first = int(np.argmax(above))
+    last = int(len(above) - 1 - np.argmax(above[::-1]))
+    return float(last - first + 1)
+
+
 def extract_features(candidate, frame_data):
     """Compute feature dict for one candidate (21 features: 13 base + 5 color + 3 quadrant).
 
@@ -395,6 +424,16 @@ def extract_features(candidate, frame_data):
             np.max([r.get(f"{table}_UR_mean", 0)
                     for r in window[max(0, peak_idx - 3):peak_idx + 4]]))
             if len(window) > 0 else 0.0,
+        # Spatial contour features — from MOG2 foreground blob geometry
+        "blob_max_area": float(candidate.get("blob_max_area", 0.0)),
+        "blob_max_aspect": float(candidate.get("blob_max_aspect", 0.0)),
+        "blob_trajectory_x": float(candidate.get("blob_trajectory_x", 0.0)),
+        "blob_y_centroid": float(candidate.get("blob_peak_y", 0.0)),
+        "table_solidity": float(candidate.get("table_solidity", 0.0)),
+        # Overlap detection — table signal instability during blanket transition
+        "table_transition_var": float(
+            np.max(np.abs(np.diff(sig_series)))
+            if len(sig_series) > 1 else 0.0),
     }
 
 
