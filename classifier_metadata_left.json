@@ -18,12 +18,128 @@
     "color_G_drop",
     "color_B_drop",
     "color_RG_ratio_peak",
-    "color_RB_ratio_peak"
+    "color_RB_ratio_peak",
+    "load_asymmetry",
+    "quadrant_LR_drop",
+    "quadrant_UR_peak"
   ],
-  "n_features": 18,
-  "decision_threshold": 0.5,
-  "cv_f1_mean": 0.8918126741694377,
-  "cv_f1_std": 0.02700990599299161,
+  "n_features": 21,
+  "trained_at": "2026-05-04T01:10:12.806587",
+  "training_clips": [
+    "gt_clip1_morning",
+    "gt_clip2_prelunch",
+    "gt_clip3_postlunch",
+    "gt_clip4_afternoon_dark",
+    "gt_clip5_endofday",
+    "gt_clip6_lunchbreak",
+    "gt_clip7_postlunch_return",
+    "gt_clip8_afternoon",
+    "gt_clip9_latemorning"
+  ],
   "n_samples": 970,
-  "n_positives": 206
+  "n_positives": 206,
+  "n_negatives": 764,
+  "cv_f1_mean": 0.8960440945621064,
+  "cv_f1_std": 0.025971934274650964,
+  "cv_precision_mean": 0.8722470874004766,
+  "cv_recall_mean": 0.9224157955865273,
+  "feature_importances": {
+    "peak_height": 0.014591862447559834,
+    "peak_above_baseline": 0.01982840523123741,
+    "duration_above_thresh_sec": 0.02490703947842121,
+    "rise_time_sec": 0.012848911806941032,
+    "decay_time_sec": 0.028284236788749695,
+    "skewness": 0.020039327442646027,
+    "auc_above_thresh": 0.528619110584259,
+    "pre_peak_table_max": 0.013864145614206791,
+    "post_peak_table_min": 0.023409470915794373,
+    "table_drop": 0.04910297319293022,
+    "table_signal_at_peak": 0.030505046248435974,
+    "simultaneous_air_other_table": 0.028907954692840576,
+    "air_diff_to_other": 0.016304578632116318,
+    "color_R_drop": 0.028898855671286583,
+    "color_G_drop": 0.035842157900333405,
+    "color_B_drop": 0.008679007180035114,
+    "color_RG_ratio_peak": 0.017073415219783783,
+    "color_RB_ratio_peak": 0.03298712521791458,
+    "load_asymmetry": 0.026780275627970695,
+    "quadrant_LR_drop": 0.012550607323646545,
+    "quadrant_UR_peak": 0.02597564272582531
+  },
+  "model": "XGBClassifier(n_estimators=300, max_depth=6)",
+  "decision_threshold": 0.5000000000000002,
+  "loco_summary": {
+    "gt_clip1_morning": {
+      "cand_f1": 0.6666666666666666,
+      "cand_p": 0.5,
+      "cand_r": 1.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip2_prelunch": {
+      "cand_f1": 0.8266666666666667,
+      "cand_p": 0.7209302325581395,
+      "cand_r": 0.96875,
+      "cluster_f1": 0.031088082901554404,
+      "cluster_p": 0.20930232558139536,
+      "cluster_r": 0.016791044776119403
+    },
+    "gt_clip3_postlunch": {
+      "cand_f1": 0.8888888888888888,
+      "cand_p": 0.9230769230769231,
+      "cand_r": 0.8571428571428571,
+      "cluster_f1": 0.07453416149068323,
+      "cluster_p": 0.46153846153846156,
+      "cluster_r": 0.04054054054054054
+    },
+    "gt_clip4_afternoon_dark": {
+      "cand_f1": 0.9024390243902439,
+      "cand_p": 1.0,
+      "cand_r": 0.8222222222222222,
+      "cluster_f1": 0.02649006622516556,
+      "cluster_p": 0.2702702702702703,
+      "cluster_r": 0.013927576601671309
+    },
+    "gt_clip5_endofday": {
+      "cand_f1": 0.0,
+      "cand_p": 0.0,
+      "cand_r": 0.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip6_lunchbreak": {
+      "cand_f1": 0.5,
+      "cand_p": 0.3333333333333333,
+      "cand_r": 1.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip7_postlunch_return": {
+      "cand_f1": 0.0,
+      "cand_p": 0.0,
+      "cand_r": 0.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip8_afternoon": {
+      "cand_f1": 0.896551724137931,
+      "cand_p": 0.9629629629629629,
+      "cand_r": 0.8387096774193549,
+      "cluster_f1": 0.0041753653444676405,
+      "cluster_p": 0.037037037037037035,
+      "cluster_r": 0.0022123893805309734
+    },
+    "gt_clip9_latemorning": {
+      "cand_f1": 0.8554913294797688,
+      "cand_p": 0.7551020408163265,
+      "cand_r": 0.9866666666666667,
+      "cluster_f1": 0.11324786324786322,
+      "cluster_p": 0.5408163265306123,
+      "cluster_r": 0.06324582338902147
+    }
+  }
 }

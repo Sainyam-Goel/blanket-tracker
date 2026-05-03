@@ -13,12 +13,133 @@
     "table_drop",
     "table_signal_at_peak",
     "simultaneous_air_other_table",
-    "air_diff_to_other"
+    "air_diff_to_other",
+    "color_R_drop",
+    "color_G_drop",
+    "color_B_drop",
+    "color_RG_ratio_peak",
+    "color_RB_ratio_peak",
+    "load_asymmetry",
+    "quadrant_LR_drop",
+    "quadrant_UR_peak"
   ],
-  "n_features": 13,
-  "decision_threshold": 0.5,
-  "cv_f1_mean": 0.9019869689719799,
-  "cv_f1_std": 0.028287007708995518,
+  "n_features": 21,
+  "trained_at": "2026-05-04T01:10:22.200083",
+  "training_clips": [
+    "gt_clip1_morning",
+    "gt_clip2_prelunch",
+    "gt_clip3_postlunch",
+    "gt_clip4_afternoon_dark",
+    "gt_clip5_endofday",
+    "gt_clip6_lunchbreak",
+    "gt_clip7_postlunch_return",
+    "gt_clip8_afternoon",
+    "gt_clip9_latemorning"
+  ],
   "n_samples": 1175,
-  "n_positives": 239
+  "n_positives": 239,
+  "n_negatives": 936,
+  "cv_f1_mean": 0.918198465526101,
+  "cv_f1_std": 0.025908524541120692,
+  "cv_precision_mean": 0.9005533174329546,
+  "cv_recall_mean": 0.9372340425531915,
+  "feature_importances": {
+    "peak_height": 0.019448060542345047,
+    "peak_above_baseline": 0.03394271805882454,
+    "duration_above_thresh_sec": 0.008383084088563919,
+    "rise_time_sec": 0.020942701026797295,
+    "decay_time_sec": 0.022934265434741974,
+    "skewness": 0.009210288524627686,
+    "auc_above_thresh": 0.5402529835700989,
+    "pre_peak_table_max": 0.042798399925231934,
+    "post_peak_table_min": 0.011870818212628365,
+    "table_drop": 0.05574992671608925,
+    "table_signal_at_peak": 0.01355914305895567,
+    "simultaneous_air_other_table": 0.006170044187456369,
+    "air_diff_to_other": 0.020307542756199837,
+    "color_R_drop": 0.013424018397927284,
+    "color_G_drop": 0.023614531382918358,
+    "color_B_drop": 0.019615139812231064,
+    "color_RG_ratio_peak": 0.022920556366443634,
+    "color_RB_ratio_peak": 0.029136445373296738,
+    "load_asymmetry": 0.024384545162320137,
+    "quadrant_LR_drop": 0.015611078590154648,
+    "quadrant_UR_peak": 0.04572374373674393
+  },
+  "model": "XGBClassifier(n_estimators=300, max_depth=6)",
+  "decision_threshold": 0.7600000000000005,
+  "loco_summary": {
+    "gt_clip1_morning": {
+      "cand_f1": 0.8130081300813008,
+      "cand_p": 0.847457627118644,
+      "cand_r": 0.78125,
+      "cluster_f1": 0.09523809523809523,
+      "cluster_p": 0.5789473684210527,
+      "cluster_r": 0.05188679245283019
+    },
+    "gt_clip2_prelunch": {
+      "cand_f1": 0.8936170212765957,
+      "cand_p": 0.8936170212765957,
+      "cand_r": 0.8936170212765957,
+      "cluster_f1": 0.049295774647887314,
+      "cluster_p": 0.3333333333333333,
+      "cluster_r": 0.026615969581749048
+    },
+    "gt_clip3_postlunch": {
+      "cand_f1": 0.9107142857142857,
+      "cand_p": 0.9272727272727272,
+      "cand_r": 0.8947368421052632,
+      "cluster_f1": 0.06488991888760139,
+      "cluster_p": 0.5283018867924528,
+      "cluster_r": 0.0345679012345679
+    },
+    "gt_clip4_afternoon_dark": {
+      "cand_f1": 0.75,
+      "cand_p": 0.625,
+      "cand_r": 0.9375,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip5_endofday": {
+      "cand_f1": 0.0,
+      "cand_p": 0.0,
+      "cand_r": 0.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip6_lunchbreak": {
+      "cand_f1": 0.918918918918919,
+      "cand_p": 0.8717948717948718,
+      "cand_r": 0.9714285714285714,
+      "cluster_f1": 0.026101141924959218,
+      "cluster_p": 0.22857142857142856,
+      "cluster_r": 0.01384083044982699
+    },
+    "gt_clip7_postlunch_return": {
+      "cand_f1": 0.0,
+      "cand_p": 0.0,
+      "cand_r": 0.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip8_afternoon": {
+      "cand_f1": 0.0,
+      "cand_p": 0.0,
+      "cand_r": 0.0,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    },
+    "gt_clip9_latemorning": {
+      "cand_f1": 0.8444444444444444,
+      "cand_p": 0.76,
+      "cand_r": 0.95,
+      "cluster_f1": 0.0,
+      "cluster_p": 0.0,
+      "cluster_r": 0.0
+    }
+  }
 }

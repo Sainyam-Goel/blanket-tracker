@@ -2,7 +2,64 @@
 
 ---
 
-# ✅ CH27 v4.2 SHIPPED (2026-05-03 — all-frames matching, color features, data-driven ROI discovery)
+# ✅ CH27 v4.3 — XGBoost + Feature Engineering (2026-05-03)
+
+## Headline
+
+**XGBoost beats RF by +0.010 F1.** Locked at **0.907 avg** (LEFT=0.896, RIGHT=0.918).
+Net gain vs RF baseline (0.872): **+0.035**.
+
+| Model | CV F1 | Features | Threshold |
+|---|---|---|---|
+| LEFT | **0.896** ± 0.026 | 21 (13 base + 5 color + 3 quadrant) | 0.50 |
+| RIGHT | **0.918** ± 0.026 | 21 | 0.76 |
+| **Avg** | **0.907** | | |
+
+## What Changed (v4.2 → v4.3)
+
+### XGBoost Replaces RandomForest (+0.010 F1)
+XGBoost consistently outperforms RF on tabular data with class imbalance. Uses `scale_pos_weight` (native class balance) instead of RF's `class_weight=balanced`. Same predict_proba API — zero inference pipeline changes. Training: `python3 train_taping_classifier.py --per-table --classifier xgb`.
+
+### Features Tested
+We systematically tested every feature combination across 9 labeled clips:
+
+| Feature | Added | Effect | Verdict |
+|---|---|---|---|
+| All cluster frames (median→all) | v4.2 | **+0.030** | ✅ Core |
+| Color BGR drops+ratios | v4.2 | +0.018 LEFT, -0.007 RIGHT | ✅ LEFT only |
+| Quadrant loading asymmetry | v4.2 | +0.002 LEFT, -0.007 RIGHT (RF), neutral (XGB) | ⚠️ Keep |
+| Load-context as feature | v4.3 | -0.006 | ❌ Redundant with pre_peak_table_max |
+| Sub-peak count + steepness | v4.3 | -0.004 | ❌ Noise |
+| XGBoost instead of RF | v4.3 | **+0.009** | ✅ Core |
+| Stacking (RF+XGB avg) | v4.3 | -0.002 | ❌ Dilutes XGBoost |
+| Heatmap-discovered ROIs | v4.2 | reverted | ❌ Motion ≠ signal |
+| Dynamic/conservative threshold | v4.1 | reverted | ❌ Kills recall |
+
+### Key Lesson
+After all-frames matching (+0.030) and XGBoost (+0.009), every feature engineering attempt either added noise or was redundant. The remaining 0.043 gap to 0.95 requires **more labeled data** — the model has exhausted what 9 labeled clips can teach it about the feature space.
+
+## F1 Trajectory (full session)
+
+```
+0.872 → 0.902 → 0.907
+ RF    +frames  +XGBoost
+```
+
+## Quick Commands
+```bash
+# Train per-table XGBoost (production)
+python3 train_taping_classifier.py --per-table --classifier xgb
+
+# Full-day run (~53 min)
+python3 run_full_day.py --ch27-only --ch27-version v4
+
+# Test on single clip
+python3 taping_counter.py gt_clips/gt_clip1_morning.mp4 --version v4
+```
+
+---
+
+# ✅ CH27 v4.2 — All-Frames Matching & Color Features (2026-05-03)
 
 ## Headline Result
 

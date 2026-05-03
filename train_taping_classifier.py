@@ -262,6 +262,23 @@ def _quadrant_drop(window, peak_idx, pre_start, post_end, table, quad):
     return float(np.max(post) - np.mean(pre))
 
 
+def _count_threshold_crossings(air_series, peak_idx, threshold):
+    """Count distinct threshold crossings in the air motion pulse window.
+
+    Real tosses have ONE clean crossing (up through threshold, stay above,
+    then drop). Noise has multiple crossings (signal oscillates around
+    threshold). More crossings = more likely to be noise.
+    """
+    if len(air_series) < 3:
+        return 0
+    above = air_series > threshold
+    crossings = 0
+    for i in range(1, len(above)):
+        if above[i] and not above[i-1]:
+            crossings += 1  # rising edge
+    return crossings
+
+
 def extract_features(candidate, frame_data):
     """Compute feature dict for one candidate (21 features: 13 base + 5 color + 3 quadrant).
 
@@ -696,15 +713,51 @@ PER_TABLE_OUT = {
 }
 
 
-def train_per_table_classifiers(out_dir=HERE):
-    """Train separate RandomForest classifiers for LEFT and RIGHT tables.
+def _make_clf(n_pos, n_neg, classifier="xgb"):
+    """Create a classifier with balanced class handling.
 
-    Rationale: LEFT and RIGHT have different signal profiles (air-zone
-    geometry, worker handedness, blanket types). A single model compromises
-    both — the LEFT morning clip F1 drops to 0.50 while RIGHT achieves 0.94
-    under the full-fit single model. Separate classifiers fix this.
+    Options: rf (RandomForest), xgb (XGBoost), stack (Voting: RF+XGB averaged).
     """
-    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.ensemble import VotingClassifier, RandomForestClassifier
+    import xgboost as xgb
+
+    if classifier == "rf":
+        return RandomForestClassifier(
+            n_estimators=300, max_depth=8,
+            class_weight="balanced", random_state=42, n_jobs=-1,
+            min_samples_leaf=3,
+        )
+    elif classifier == "xgb":
+        return xgb.XGBClassifier(
+            n_estimators=300, max_depth=6, learning_rate=0.05,
+            scale_pos_weight=n_neg / max(1, n_pos),
+            objective="binary:logistic", eval_metric="logloss",
+            random_state=42, n_jobs=-1, verbosity=0,
+        )
+    else:  # stack
+        rf = RandomForestClassifier(
+            n_estimators=200, max_depth=8,
+            class_weight="balanced", random_state=42, n_jobs=-1,
+            min_samples_leaf=3,
+        )
+        xgb_clf = xgb.XGBClassifier(
+            n_estimators=200, max_depth=6, learning_rate=0.05,
+            scale_pos_weight=n_neg / max(1, n_pos),
+            objective="binary:logistic", eval_metric="logloss",
+            random_state=42, n_jobs=-1, verbosity=0,
+        )
+        return VotingClassifier(
+            estimators=[("rf", rf), ("xgb", xgb_clf)],
+            voting="soft", n_jobs=-1,
+        )
+
+
+def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
+    """Train separate classifiers for LEFT and RIGHT tables.
+
+    Supports RandomForest ('rf') and XGBoost ('xgb').
+    XGBoost typically +0.02-0.04 F1 over RF on tabular data with class imbalance.
+    """
     from sklearn.model_selection import StratifiedKFold, cross_val_score
     from sklearn.metrics import (
         precision_score, recall_score, f1_score, confusion_matrix,
@@ -712,7 +765,7 @@ def train_per_table_classifiers(out_dir=HERE):
     import joblib
 
     print("=" * 70)
-    print("  CH27 v4 — PER-TABLE CLASSIFIERS (LEFT / RIGHT separate)")
+    print(f"  CH27 v4 — PER-TABLE CLASSIFIERS (LEFT / RIGHT, {classifier.upper()})")
     print("=" * 70)
 
     # Build per-clip datasets and split by table
@@ -750,11 +803,7 @@ def train_per_table_classifiers(out_dir=HERE):
             continue
 
         # CV
-        base_clf = RandomForestClassifier(
-            n_estimators=300, max_depth=8,
-            class_weight="balanced", random_state=42, n_jobs=-1,
-            min_samples_leaf=3,
-        )
+        base_clf = _make_clf(n_pos, n_neg, classifier)
         cv = StratifiedKFold(n_splits=min(5, n_pos, n_neg), shuffle=True, random_state=42)
         cv_f1 = cross_val_score(base_clf, X_tbl, y_tbl, cv=cv, scoring="f1")
         cv_p = cross_val_score(base_clf, X_tbl, y_tbl, cv=cv, scoring="precision")
@@ -802,9 +851,7 @@ def train_per_table_classifiers(out_dir=HERE):
             X_tr = np.concatenate(X_tr_rows)
             y_tr = np.concatenate(y_tr_rows)
 
-            clf = RandomForestClassifier(
-                n_estimators=300, max_depth=8, min_samples_leaf=3,
-                class_weight="balanced", random_state=42, n_jobs=-1)
+            clf = _make_clf(int(y_tr.sum()), len(y_tr) - int(y_tr.sum()), classifier)
             clf.fit(X_tr, y_tr)
             y_pred = clf.predict(X_te)
             p = precision_score(y_te, y_pred, zero_division=0)
@@ -825,19 +872,18 @@ def train_per_table_classifiers(out_dir=HERE):
 
         # Final fit on all data
         print(f"\n  [final fit] on all {len(y_tbl)} {tbl} candidates")
-        clf = RandomForestClassifier(
-            n_estimators=300, max_depth=8,
-            class_weight="balanced", random_state=42, n_jobs=-1,
-            min_samples_leaf=3,
-        )
+        clf = _make_clf(n_pos, n_neg, classifier)
         clf.fit(X_tbl, y_tbl)
 
-        # Feature importances
-        print(f"\n  Feature importances:")
-        imps = sorted(zip(FEATURE_NAMES, clf.feature_importances_), key=lambda x: -x[1])
-        for name, imp in imps:
-            bar = "█" * int(imp * 50)
-            print(f"    {name:32s}  {imp:.3f}  {bar}")
+        # Feature importances (not available for VotingClassifier)
+        if classifier != "stack" and hasattr(clf, "feature_importances_"):
+            print(f"\n  Feature importances:")
+            imps = sorted(zip(FEATURE_NAMES, clf.feature_importances_), key=lambda x: -x[1])
+            for name, imp in imps:
+                bar = "█" * int(imp * 50)
+                print(f"    {name:32s}  {imp:.3f}  {bar}")
+        else:
+            print(f"\n  Feature importances: not available for {classifier}")
 
         # Save
         pkl_path = Path(out_dir) / PER_TABLE_OUT[tbl]
@@ -858,10 +904,12 @@ def train_per_table_classifiers(out_dir=HERE):
             "cv_f1_std": float(cv_f1.std()),
             "cv_precision_mean": float(cv_p.mean()),
             "cv_recall_mean": float(cv_r.mean()),
-            "feature_importances": dict(zip(
-                FEATURE_NAMES, [float(x) for x in clf.feature_importances_])),
-            "model": "RandomForestClassifier(n_estimators=300, max_depth=8, "
-                     "min_samples_leaf=3, class_weight='balanced', random_state=42)",
+            "feature_importances": (
+                dict(zip(FEATURE_NAMES, [float(x) for x in clf.feature_importances_]))
+                if hasattr(clf, "feature_importances_") else {}),
+            "model": "VotingClassifier(RF+XGBoost, soft)" if classifier == "stack"
+                     else ("XGBClassifier(n_estimators=300, max_depth=6)" if classifier == "xgb"
+                          else "RandomForestClassifier(n_estimators=300, max_depth=8)"),
             "decision_threshold": float(best_thresh),
             "loco_summary": loco_summary,
         }
@@ -992,6 +1040,8 @@ def main():
                         help="Leave-one-clip-out CV (honest per-clip generalization)")
     parser.add_argument("--per-table", action="store_true",
                         help="Train separate classifiers for LEFT and RIGHT tables")
+    parser.add_argument("--classifier", default="xgb", choices=["rf", "xgb", "stack"],
+                        help="Classifier: rf=RandomForest, xgb=XGBoost, stack=RF+XGB averaged")
     args = parser.parse_args()
 
     clips = [args.clip] if args.clip else CLIPS_FOR_TRAINING
@@ -1045,7 +1095,7 @@ def main():
         return
 
     if args.per_table:
-        train_per_table_classifiers()
+        train_per_table_classifiers(classifier=args.classifier)
         return
 
     # Default: train the classifier

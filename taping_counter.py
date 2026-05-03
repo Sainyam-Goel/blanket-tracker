@@ -650,6 +650,8 @@ class _TableTrackerV2:
         self.last_toss_t = -1e9
         self.last_toss_frame = -1
         self.frames_break_low = 0
+        self.last_load_start_t = -1.0   # when the last load cycle began
+        self.last_load_end_t = -1.0     # when the last load cycle ended
         self.in_air_pulse = False        # currently inside an air-motion pulse
         self.air_pulse_peak = 0.0
         self.air_pulse_peak_t = None
@@ -774,6 +776,7 @@ class _TableTrackerV2:
             self.warmup_done = True
             if signal > load_on and self.state == "empty":
                 self.state = "loaded"
+                self.last_load_start_t = t_sec
                 self.cycle_start_t = t_sec
                 self.cycle_start_frame = frame_idx
                 self.peak_signal = signal
@@ -785,6 +788,7 @@ class _TableTrackerV2:
             median_recent = signal
         if median_recent < ctx_thresh and self.state != "break":
             self.state = "break"
+            self.last_load_end_t = t_sec
             self.cycle_start_t = None
             self.frames_above_load = 0
         if self.state == "break" and signal > load_strong:
@@ -797,6 +801,8 @@ class _TableTrackerV2:
             self.frames_above_load += 1
             if self.frames_above_load >= load_min:
                 self.state = "loaded"
+                self.last_load_start_t = t_sec  # record load cycle start
+                self.cycle_start_t = t_sec
                 self.cycle_start_t = t_sec
                 self.cycle_start_frame = frame_idx
                 self.peak_signal = signal
@@ -980,6 +986,9 @@ class _TableTrackerV2:
             "long_cycle": cycle_age > 30.0,
             "via_overlap_detector": False,
             "via_secondary_path": secondary,
+            # Load context — was the table recently loaded?
+            "last_load_start_t": self.last_load_start_t,
+            "last_load_end_t": self.last_load_end_t,
         }
         if flow is not None:
             vx, vy, mag, ang = flow
@@ -992,11 +1001,13 @@ class _TableTrackerV2:
         self.last_toss_frame = self.air_pulse_peak_f
         if signal > load_on:
             self.state = "loaded"
+            self.last_load_start_t = self.air_pulse_peak_t  # new blanket may be placed
             self.cycle_start_t = self.air_pulse_peak_t
             self.cycle_start_frame = self.air_pulse_peak_f
             self.peak_signal = signal
         else:
             self.state = "empty"
+            self.last_load_end_t = self.air_pulse_peak_t
             self.cycle_start_t = None
         self.frames_above_load = 0
         return event
