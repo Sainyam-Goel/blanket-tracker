@@ -55,9 +55,11 @@ def build_dataset(clip_name):
 
 def score_clusters(pred_times, gt_clusters, table, fps, tol_sec=MATCH_TOL_SEC):
     """Greedy match predicted times to GT clusters. Returns (P, R, F1, TP, FP, FN)."""
-    gt_peaks = sorted(c["peak_frame"] / fps
-                      for c in gt_clusters
-                      if c["table"] == table and c["type"] == "toss")
+    gt_peaks = sorted(
+        round(f / fps, 3)
+        for c in gt_clusters
+        if c["table"] == table and c["type"] == "toss"
+        for f in c.get("all_frames", [c["peak_frame"]]))
     preds = sorted(pred_times)
     used_gt = [False] * len(gt_peaks)
     used_pred = [False] * len(preds)

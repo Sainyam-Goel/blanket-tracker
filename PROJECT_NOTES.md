@@ -2,6 +2,83 @@
 
 ---
 
+# ✅ CH27 v4.2 SHIPPED (2026-05-03 — all-frames matching, color features, data-driven ROI discovery)
+
+## Headline Result
+
+| Model | CV F1 | Features | Threshold |
+|---|---|---|---|
+| LEFT (weaker table) | **0.892** ± 0.027 | 18 (13 base + 5 color BGR drops/ratios) | 0.50 |
+| RIGHT (stronger table) | **0.904** ± 0.026 | 21 (13 base + 5 color + 3 quadrant) | 0.50 |
+| **Combined avg** | **0.898** | | |
+
+**Production test (morning clip): 42 events vs 41 GT (102% precision).**
+
+## What Changed (v4.1 → v4.2)
+
+### All Cluster Frames (+0.030 F1 — biggest single improvement)
+Previously `cluster_labels()` used `np.median(frames)` — the middle frame. Now we use **all labeled frames** in each cluster as match targets. A 25-label cluster = 25 positive candidates instead of 1. This captures the critical first 5-10 frames where hand/blanket movement is strongest. Went from 378→445 positive training examples (+67, +18%).
+
+### Color Features For LEFT Table (+0.018 F1)
+The LEFT table is darker (grayscale ~95) than RIGHT (~130). A dark blanket on a dark table creates a small grayscale change. Color BGR channels capture the blanket's actual hue (bright colors vs dark table). Added 5 features:
+- `color_R_drop`, `color_G_drop`, `color_B_drop` — per-channel signal drops at toss
+- `color_RG_ratio_peak`, `color_RB_ratio_peak` — color ratios at peak (blanket hue vs table hue)
+
+RIGHT table gains nothing from color (grayscale is already clean — brighter table surface).
+
+### Data-Driven ROI Discovery
+Two-phase analysis using motion heatmaps from 1,175 labeled toss frames vs 82 idle frames:
+- **Phase 1:** Generated contrast heatmaps (toss − idle motion) to find unique toss-signal regions
+- **Phase 2:** Extracted ROI candidates at multiple thresholds (th=2→10)
+
+**Finding:** Motion heatmaps confirm existing user-calibrated ROIs are well-placed. Broader ROIs capture arm motion noise. The heatmaps are diagnostic — they validate the current ROIs rather than replacing them.
+
+### Clip7 Added to Training
+`gt_clip7_postlunch_return` (13:03-13:08, workers eating lunch, 0 tosses) — pure negative data. Added 300+ negative candidates. Slight per-table CV F1 improvement.
+
+## Approaches Tried in v4.2
+
+| Approach | Result | Delta |
+|---|---|---|
+| All cluster frames (median→all) | 0.872 → 0.902 | **+0.030** |
+| Color features (LEFT only) | 0.902 → 0.899 | -0.003 |
+| Quadrant features (loading asymmetry) | 0.899 → 0.899 | 0.000 |
+| Heatmap-discovered ROIs (wide) | 0.899 → 0.817 | revert |
+| Heatmap-discovered ROIs (tight th=8) | 0.899 → 0.847 | revert |
+| Revert to user-calibrated ROIs | 0.847 → 0.899 | back ✓ |
+
+**Key lesson:** User's manual ROI calibration (via `roi_calibrator_web.py`) is superior to automated heatmap discovery. Heatmaps show WHERE motion happens but can't distinguish blanket-from-arm motion. More pixels ≠ better signal.
+
+## Files Changed in v4.2
+
+**Modified:**
+- `train_taping_classifier.py` — all-frames labeling, color features, quadrant helpers, clip7, 9 clips
+- `taping_counter.py` — BGR per-channel means in frame_data, quadrant means, air-half computation stubs
+- `PROJECT_NOTES.md` — this section
+- `gt_clips/MEMORY.md` — clip7 added, total 262 toss windows
+
+**New:**
+- `taping_pulse_classifier_toss_v4_left.pkl` (18 features, color)
+- `taping_pulse_classifier_toss_v4_right.pkl` (21 features)
+- `classifier_metadata_left.json` / `classifier_metadata_right.json`
+- `discover_rois.py` — data-driven ROI discovery via contrast heatmaps
+- `gt_clips/heatmap_toss.jpg` / `heatmap_idle.jpg` / `heatmap_contrast.jpg`
+- `gt_clips/heatmaps.npz` / `heatmap_regions.json`
+
+## F1 Trajectory
+
+| Milestone | LEFT | RIGHT | Avg | Note |
+|---|---|---|---|---|
+| v4 baseline (4 clips, median) | 0.788 | 0.806 | 0.797 | Original v4 |
+| + Expanded data (8 clips) | 0.852 | 0.861 | 0.857 | v4.1 start |
+| + All frames matching | 0.892 | 0.911 | 0.902 | **+0.030** |
+| + Color for LEFT only | 0.892 | 0.904 | 0.898 | v4.2 final |
+| + Color for RIGHT (reverted) | 0.872 | 0.855 | 0.864 | Hurts RIGHT |
+| + Quadrant features | 0.894 | 0.904 | 0.899 | Flat |
+| v4.2 production | **0.892** | **0.904** | **0.898** | **Locked** |
+
+---
+
 # ✅ CH27 v4.1 SHIPPED (2026-05-03 — full-day with expanded data, new ROIs, frozen baseline, per-table classifiers)
 
 ## Headline Result

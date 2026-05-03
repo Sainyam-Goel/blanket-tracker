@@ -32,14 +32,15 @@ sys.path.insert(0, str(HERE))
 
 GT_DIR = HERE / "gt_clips"
 CLIPS_FOR_TRAINING = [
-    "gt_clip1_morning",         # peak active, 41 toss windows
-    "gt_clip2_prelunch",        # slowdown, 48 toss windows
-    "gt_clip3_postlunch",       # post-lunch active, 37 toss windows
-    "gt_clip4_afternoon_dark",  # different SKU, 36 toss windows
-    "gt_clip5_endofday",        # break/idle, 0 tosses — valuable negatives
-    "gt_clip6_lunchbreak",      # lunch active, 22 toss windows
-    "gt_clip8_afternoon",       # late afternoon LEFT-heavy, 20 toss windows
-    "gt_clip9_latemorning",     # late morning LEFT-heavy, 58 toss windows
+    "gt_clip1_morning",            # peak active, 41 toss windows
+    "gt_clip2_prelunch",           # slowdown, 48 toss windows
+    "gt_clip3_postlunch",          # post-lunch active, 37 toss windows
+    "gt_clip4_afternoon_dark",     # different SKU, 36 toss windows
+    "gt_clip5_endofday",           # break/idle, 0 tosses
+    "gt_clip6_lunchbreak",         # lunch active, 22 toss windows
+    "gt_clip7_postlunch_return",   # idle — workers eating lunch, 0 tosses
+    "gt_clip8_afternoon",          # late afternoon LEFT-heavy, 20 toss windows
+    "gt_clip9_latemorning",        # late morning LEFT-heavy, 58 toss windows
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
@@ -69,6 +70,16 @@ FEATURE_NAMES = [
     # Cross-table artifact rejection
     "simultaneous_air_other_table",
     "air_diff_to_other",
+    # Color features — per-channel BGR changes at toss peak
+    "color_R_drop",        # how much RED channel dropped (blanket removed → table brightens)
+    "color_G_drop",        # how much GREEN channel dropped
+    "color_B_drop",        # how much BLUE channel dropped
+    "color_RG_ratio_peak", # R/G ratio at peak — captures blanket hue vs table hue
+    "color_RB_ratio_peak", # R/B ratio at peak
+    # Loading asymmetry — workers load from right side of each table
+    "load_asymmetry",     # LR quadrant signal minus LL (right side loads first)
+    "quadrant_LR_drop",   # signal drop in lower-right quadrant (loading zone clears)
+    "quadrant_UR_peak",   # upper-right quadrant peak — blanket presence above load zone
 ]
 
 
@@ -110,7 +121,8 @@ def _finalize_cluster(arr, table, typ):
         "type": typ,
         "start_frame": int(min(frames)),
         "end_frame": int(max(frames)),
-        "peak_frame": int(np.median(frames)),  # center-of-mass (median frame)
+        "peak_frame": int(min(frames)),     # first labeled frame — catches initial movement
+        "all_frames": sorted([int(f) for f in frames]),  # ALL frames in this cluster
         "n_labels": len(arr),
         "span_sec": (max(frames) - min(frames)) / 25.0,
     }
@@ -204,12 +216,57 @@ def _slice_frame_data(frame_data, peak_frame, pre, post):
     return [r for r in frame_data if start <= r["frame"] <= end]
 
 
+def _channel_drop(window, peak_idx, pre_start, post_end, table, channel):
+    """Post-peak max minus pre-peak mean for one BGR channel."""
+    key = f"{table}_{channel}"
+    if post_end <= peak_idx or not window:
+        return 0.0
+    post_vals = [r.get(key, 0) for r in window[peak_idx:post_end]]
+    pre_vals = [r.get(key, 0) for r in window[pre_start:peak_idx + 1]]
+    return float(np.max(post_vals) - np.mean(pre_vals))
+
+
+def _channel_ratio(window, peak_idx, table, ch1, ch2):
+    """Ratio of two BGR channels at the peak (±3 frames)."""
+    key1 = f"{table}_{ch1}"
+    key2 = f"{table}_{ch2}"
+    lo = max(0, peak_idx - 3)
+    hi = min(len(window), peak_idx + 4)
+    if hi <= lo:
+        return 1.0
+    v1 = np.mean([r.get(key1, 1) for r in window[lo:hi]])
+    v2 = np.mean([r.get(key2, 1) for r in window[lo:hi]])
+    return float(v1 / max(1.0, v2))
+
+
+def _quadrant_asym(window, peak_idx, table, quad1, quad2):
+    """Ratio/difference of two quadrant means at peak (±3 frames)."""
+    key1 = f"{table}_{quad1}_mean"
+    key2 = f"{table}_{quad2}_mean"
+    lo = max(0, peak_idx - 3)
+    hi = min(len(window), peak_idx + 4)
+    if hi <= lo:
+        return 0.0
+    v1 = np.mean([r.get(key1, 0) for r in window[lo:hi]])
+    v2 = np.mean([r.get(key2, 0) for r in window[lo:hi]])
+    return float((v1 - v2) / max(1.0, abs(v1 + v2)))
+
+
+def _quadrant_drop(window, peak_idx, pre_start, post_end, table, quad):
+    """Post-peak max minus pre-peak mean for one quadrant."""
+    key = f"{table}_{quad}_mean"
+    if post_end <= peak_idx or not window:
+        return 0.0
+    post = [r.get(key, 0) for r in window[peak_idx:post_end]]
+    pre = [r.get(key, 0) for r in window[pre_start:peak_idx + 1]]
+    return float(np.max(post) - np.mean(pre))
+
+
 def extract_features(candidate, frame_data):
-    """Compute the 13 feature dict for one candidate.
+    """Compute feature dict for one candidate (21 features: 13 base + 5 color + 3 quadrant).
 
     candidate:  {table, frame, time_sec, ...}
     frame_data: full per-frame signals from candidate-collection mode
-                (each row has left_/right_ {mean, std, signal, air_motion})
     """
     table = candidate["table"]
     other = "right" if table == "left" else "left"
@@ -302,6 +359,25 @@ def extract_features(candidate, frame_data):
         "table_signal_at_peak": table_signal_at_peak,
         "simultaneous_air_other_table": simultaneous_air_other_table,
         "air_diff_to_other": air_diff_to_other,
+        # Color features — per-channel BGR changes at the toss peak.
+        # Blanket removal → table brightens. Colored blankets change
+        # specific channels more than grayscale alone captures.
+        "color_R_drop": _channel_drop(window, peak_idx, pre_peak_start,
+                                       post_peak_end, table, "R"),
+        "color_G_drop": _channel_drop(window, peak_idx, pre_peak_start,
+                                       post_peak_end, table, "G"),
+        "color_B_drop": _channel_drop(window, peak_idx, pre_peak_start,
+                                       post_peak_end, table, "B"),
+        "color_RG_ratio_peak": _channel_ratio(window, peak_idx, table, "R", "G"),
+        "color_RB_ratio_peak": _channel_ratio(window, peak_idx, table, "R", "B"),
+        # Loading asymmetry features — workers always load from the RIGHT side
+        "load_asymmetry": _quadrant_asym(window, peak_idx, table, "LR", "LL"),
+        "quadrant_LR_drop": _quadrant_drop(window, peak_idx, pre_peak_start,
+                                            post_peak_end, table, "LR"),
+        "quadrant_UR_peak": float(
+            np.max([r.get(f"{table}_UR_mean", 0)
+                    for r in window[max(0, peak_idx - 3):peak_idx + 4]]))
+            if len(window) > 0 else 0.0,
     }
 
 
@@ -320,27 +396,26 @@ def label_candidates(candidates, gt_clusters, tol_sec=MATCH_TOL_SEC, fps=25.0):
     """Assign each candidate a binary label.
 
     A candidate is POSITIVE (label=1) if there is a GT cluster of the same
-    table with peak_frame within ±tol_sec * fps frames of the candidate.
-    Otherwise label=0.
+    table whose ANY labeled frame is within ±tol_sec of the candidate's peak.
+    Uses ALL labeled frames in each cluster (not just the median).
 
     Returns list of (candidate, label) tuples.
     """
-    # Pre-index GT clusters by table for fast lookup. Only TOSS clusters
-    # are positives for the toss classifier (loads are out of scope for v4).
-    toss_clusters_by_table = {"left": [], "right": []}
+    # Build a flat set of all labeled frames per table for fast lookup
+    toss_frames_by_table = {"left": set(), "right": set()}
     for c in gt_clusters:
         if c["type"] == "toss":
-            toss_clusters_by_table[c["table"]].append(c["peak_frame"])
-    for tbl in toss_clusters_by_table:
-        toss_clusters_by_table[tbl].sort()
+            for f in c.get("all_frames", [c["peak_frame"]]):
+                toss_frames_by_table[c["table"]].add(f)
 
     tol_frames = int(tol_sec * fps)
     out = []
     for cand in candidates:
         tbl = cand["table"]
         peak_f = int(cand["frame"])
+        # Check if any labeled frame for this table is within tolerance
         nearest = min(
-            (abs(peak_f - g) for g in toss_clusters_by_table[tbl]),
+            (abs(peak_f - g) for g in toss_frames_by_table[tbl]),
             default=float("inf"),
         )
         label = 1 if nearest <= tol_frames else 0
@@ -377,6 +452,7 @@ def coverage_check(clip_name):
     cov_per_table = {"left": [], "right": []}
     for c in toss_clusters:
         tbl = c["table"]
+        # For coverage: use the earliest labeled frame as reference
         peak_t = c["peak_frame"] / fps
         # Find nearest same-table candidate
         same_tbl = [e for e in candidates if e["table"] == tbl]
@@ -805,8 +881,13 @@ def _score_predictions(times_pred, gt_clusters, table, fps=25.0,
     """Score a set of predicted toss timestamps against GT clusters.
     Returns precision, recall, F1, n_tp, n_fp, n_fn for ONE table.
     """
-    gt_peaks = sorted(c["peak_frame"] / fps for c in gt_clusters
-                      if c["table"] == table and c["type"] == "toss")
+    # Build flat set of all labeled GT frame times for this table
+    gt_times = set()
+    for c in gt_clusters:
+        if c["table"] == table and c["type"] == "toss":
+            for f in c.get("all_frames", [c["peak_frame"]]):
+                gt_times.add(round(f / fps, 3))
+    gt_peaks = sorted(gt_times)
     preds = sorted(times_pred)
     used_gt = [False] * len(gt_peaks)
     used_pred = [False] * len(preds)

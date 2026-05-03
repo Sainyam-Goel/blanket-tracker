@@ -13,108 +13,17 @@
     "table_drop",
     "table_signal_at_peak",
     "simultaneous_air_other_table",
-    "air_diff_to_other"
+    "air_diff_to_other",
+    "color_R_drop",
+    "color_G_drop",
+    "color_B_drop",
+    "color_RG_ratio_peak",
+    "color_RB_ratio_peak"
   ],
-  "n_features": 13,
-  "trained_at": "2026-05-03T19:08:55.509359",
-  "training_clips": [
-    "gt_clip1_morning",
-    "gt_clip2_prelunch",
-    "gt_clip3_postlunch",
-    "gt_clip4_afternoon_dark",
-    "gt_clip5_endofday",
-    "gt_clip6_lunchbreak",
-    "gt_clip8_afternoon",
-    "gt_clip9_latemorning"
-  ],
-  "n_samples": 955,
-  "n_positives": 185,
-  "n_negatives": 770,
-  "cv_f1_mean": 0.8518432691731792,
-  "cv_f1_std": 0.030600011506838862,
-  "cv_precision_mean": 0.7992307692307692,
-  "cv_recall_mean": 0.9135135135135135,
-  "feature_importances": {
-    "peak_height": 0.09246964728957863,
-    "peak_above_baseline": 0.017892687316711325,
-    "duration_above_thresh_sec": 0.18616547876778772,
-    "rise_time_sec": 0.09075863752311107,
-    "decay_time_sec": 0.026173253154553214,
-    "skewness": 0.09739390292646677,
-    "auc_above_thresh": 0.3541481868855206,
-    "pre_peak_table_max": 0.0207273661525447,
-    "post_peak_table_min": 0.009778596394667289,
-    "table_drop": 0.05178928053809447,
-    "table_signal_at_peak": 0.01109260739487015,
-    "simultaneous_air_other_table": 0.012156143875542633,
-    "air_diff_to_other": 0.029454211780551454
-  },
-  "model": "RandomForestClassifier(n_estimators=300, max_depth=8, min_samples_leaf=3, class_weight='balanced', random_state=42)",
+  "n_features": 18,
   "decision_threshold": 0.5,
-  "loco_summary": {
-    "gt_clip1_morning": {
-      "cand_f1": 0.7777777777777778,
-      "cand_p": 0.6363636363636364,
-      "cand_r": 1.0,
-      "cluster_f1": 0.0,
-      "cluster_p": 0.0,
-      "cluster_r": 0.0
-    },
-    "gt_clip2_prelunch": {
-      "cand_f1": 0.7407407407407407,
-      "cand_p": 0.7407407407407407,
-      "cand_r": 0.7407407407407407,
-      "cluster_f1": 0.1904761904761905,
-      "cluster_p": 0.2,
-      "cluster_r": 0.18181818181818182
-    },
-    "gt_clip3_postlunch": {
-      "cand_f1": 0.8571428571428571,
-      "cand_p": 1.0,
-      "cand_r": 0.75,
-      "cluster_f1": 0.1818181818181818,
-      "cluster_p": 0.2,
-      "cluster_r": 0.16666666666666666
-    },
-    "gt_clip4_afternoon_dark": {
-      "cand_f1": 0.8235294117647058,
-      "cand_p": 1.0,
-      "cand_r": 0.7,
-      "cluster_f1": 0.18518518518518517,
-      "cluster_p": 0.18518518518518517,
-      "cluster_r": 0.18518518518518517
-    },
-    "gt_clip5_endofday": {
-      "cand_f1": 0.0,
-      "cand_p": 0.0,
-      "cand_r": 0.0,
-      "cluster_f1": 0.0,
-      "cluster_p": 0.0,
-      "cluster_r": 0.0
-    },
-    "gt_clip6_lunchbreak": {
-      "cand_f1": 0.0,
-      "cand_p": 0.0,
-      "cand_r": 0.0,
-      "cluster_f1": 0.0,
-      "cluster_p": 0.0,
-      "cluster_r": 0.0
-    },
-    "gt_clip8_afternoon": {
-      "cand_f1": 0.9180327868852459,
-      "cand_p": 0.9032258064516129,
-      "cand_r": 0.9333333333333333,
-      "cluster_f1": 0.0425531914893617,
-      "cluster_p": 0.037037037037037035,
-      "cluster_r": 0.05
-    },
-    "gt_clip9_latemorning": {
-      "cand_f1": 0.8121212121212121,
-      "cand_p": 0.6907216494845361,
-      "cand_r": 0.9852941176470589,
-      "cluster_f1": 0.2957746478873239,
-      "cluster_p": 0.22105263157894736,
-      "cluster_r": 0.44680851063829785
-    }
-  }
+  "cv_f1_mean": 0.8918126741694377,
+  "cv_f1_std": 0.02700990599299161,
+  "n_samples": 970,
+  "n_positives": 206
 }

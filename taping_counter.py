@@ -74,8 +74,8 @@ LEFT_TABLE_ROI  = (60, 700, 580, 1000)    # x1, y1, x2, y2
 RIGHT_TABLE_ROI = (1280, 700, 1860, 1000)
 HEAP_ROI        = (700, 350, 1220, 750)   # validation-only
 
-# v2 ROIs — tight to actual table SURFACE only, calibrated against the empty-state
-# frame at t=280s of the GT clip (10:24:53). Updated 2026-05-03 via roi_calibrator_web.py.
+# v2 ROIs — calibrated against the empty-state frame and user-tuned via
+# roi_calibrator_web.py (2026-05-03).
 LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
 RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
 # Air zone above each table — narrow horizontal strip where a tossed blanket
@@ -1503,6 +1503,28 @@ class TapingCounter:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             frame_luma = float(np.mean(gray))
 
+            # Per-channel BGR means for color features (both table ROIs)
+            L_x1, L_y1, L_x2, L_y2 = self.left_roi
+            R_x1, R_y1, R_x2, R_y2 = self.right_roi
+            # Full ROIs
+            L_bgr = frame[L_y1:L_y2, L_x1:L_x2]
+            R_bgr = frame[R_y1:R_y2, R_x1:R_x2]
+            # Table quadrants — split at mid-x for left/right, mid-y for upper/lower
+            L_mx = (L_x1 + L_x2) // 2; L_my = (L_y1 + L_y2) // 2
+            R_mx = (R_x1 + R_x2) // 2; R_my = (R_y1 + R_y2) // 2
+            # Key quadrants: lower-right (loading side), upper-right, lower-left
+            L_LR_bgr = frame[L_my:L_y2, L_mx:L_x2]
+            L_UR_bgr = frame[L_y1:L_my, L_mx:L_x2]
+            L_LL_bgr = frame[L_my:L_y2, L_x1:L_mx]
+            R_LR_bgr = frame[R_my:R_y2, R_mx:R_x2]
+            R_UR_bgr = frame[R_y1:R_my, R_mx:R_x2]
+            R_LL_bgr = frame[R_my:R_y2, R_x1:R_mx]
+            # Air zone halves — upper = toss direction, lower = arm follow-through
+            LA_x1, LA_y1, LA_x2, LA_y2 = self.left_air_roi
+            RA_x1, RA_y1, RA_x2, RA_y2 = self.right_air_roi
+            LA_my = (LA_y1 + LA_y2) // 2
+            RA_my = (RA_y1 + RA_y2) // 2
+
             paused = self._check_lighting(frame_idx, t_sec, frame_luma)
 
             if self.version in ("v2", "v4"):
@@ -1567,6 +1589,20 @@ class TapingCounter:
                         "left_air_motion": round(self.left.last_air_motion, 2),
                         "right_air_motion": round(self.right.last_air_motion, 2),
                         "frame_luma": round(frame_luma, 2),
+                        # Per-channel BGR means for color-based features
+                        "left_B": round(float(np.mean(L_bgr[:, :, 0])), 2),
+                        "left_G": round(float(np.mean(L_bgr[:, :, 1])), 2),
+                        "left_R": round(float(np.mean(L_bgr[:, :, 2])), 2),
+                        "right_B": round(float(np.mean(R_bgr[:, :, 0])), 2),
+                        "right_G": round(float(np.mean(R_bgr[:, :, 1])), 2),
+                        "right_R": round(float(np.mean(R_bgr[:, :, 2])), 2),
+                        # Table quadrants — grayscale means for loading asymmetry
+                        "left_LR_mean": round(float(np.mean(L_LR_bgr)), 2),
+                        "left_UR_mean": round(float(np.mean(L_UR_bgr)), 2),
+                        "left_LL_mean": round(float(np.mean(L_LL_bgr)), 2),
+                        "right_LR_mean": round(float(np.mean(R_LR_bgr)), 2),
+                        "right_UR_mean": round(float(np.mean(R_UR_bgr)), 2),
+                        "right_LL_mean": round(float(np.mean(R_LL_bgr)), 2),
                         "left_state": self.left.state,
                         "right_state": self.right.state,
                         "paused": paused,
@@ -1642,6 +1678,20 @@ class TapingCounter:
                         "left_air_motion":  round(self.left.last_air_motion, 2),
                         "right_air_motion": round(self.right.last_air_motion, 2),
                         "frame_luma": round(frame_luma, 2),
+                        # Per-channel BGR means for color-based features
+                        "left_B": round(float(np.mean(L_bgr[:, :, 0])), 2),
+                        "left_G": round(float(np.mean(L_bgr[:, :, 1])), 2),
+                        "left_R": round(float(np.mean(L_bgr[:, :, 2])), 2),
+                        "right_B": round(float(np.mean(R_bgr[:, :, 0])), 2),
+                        "right_G": round(float(np.mean(R_bgr[:, :, 1])), 2),
+                        "right_R": round(float(np.mean(R_bgr[:, :, 2])), 2),
+                        # Table quadrants — grayscale means for loading asymmetry
+                        "left_LR_mean": round(float(np.mean(L_LR_bgr)), 2),
+                        "left_UR_mean": round(float(np.mean(L_UR_bgr)), 2),
+                        "left_LL_mean": round(float(np.mean(L_LL_bgr)), 2),
+                        "right_LR_mean": round(float(np.mean(R_LR_bgr)), 2),
+                        "right_UR_mean": round(float(np.mean(R_UR_bgr)), 2),
+                        "right_LL_mean": round(float(np.mean(R_LL_bgr)), 2),
                         "left_state": self.left.state,
                         "right_state": self.right.state,
                         "paused": paused,
