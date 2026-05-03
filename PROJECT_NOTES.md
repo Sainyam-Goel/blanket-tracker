@@ -63,6 +63,32 @@ Tracked in commit history:
 The top 3 carry 56% of the importance — pulse SHAPE (duration + AUC) +
 SUSTAINED TABLE CHANGE (drop) are the strongest signals.
 
+## v4 production day (28 Apr 2026, 9 hrs)
+
+```
+CH27 v4 full-day → taping_fullday.json
+  3823 cycles  (L=2182, R=1641)  over 9.0 hrs
+  Suppressed by classifier: 17,069 (82% rejection rate — classifier doing real work)
+  4 long cycles (>60s, likely tape issues / stuck states)
+  Processing: 6071s ≈ 101 min, 133 fps (1.5× realtime)
+```
+
+**v4 vs v2 vs v1 production counts (same 9-hour day):**
+
+| Variant | Total | LEFT | RIGHT |
+|---|---:|---:|---:|
+| v1 | 2,557 | 1,090 | 1,467 |
+| v2 | 1,887 | 1,056 | 831 |
+| **v4** | **3,823** | **2,182** | **1,641** |
+
+v4 finds **2× more cycles than v2**, consistent with the per-clip
+validation showing v4's recall is 0.88 vs v2's ~0.12. v2 was severely
+under-counting in production despite "F1=0.85 on the original GT clip" —
+that GT clip was unrepresentative. v4 is the first version with
+labeled-data-validated cross-clip behavior.
+
+---
+
 ## Honest caveats
 
 - **CV F1 = 0.79 ± 0.02** (5-fold stratified on 583 train candidates).
@@ -109,15 +135,103 @@ python3 generate_dashboard.py && cp blanket_tracker_dashboard.html index.html
   `taping_fullday_v2.json`
 - `generate_dashboard.py` — CH27 panel shows v4 vs v1+v2 comparison
 
-## Next refinements (when needed)
+## Path to F1 > 0.95 (ranked by ROI; in-sample lift unless noted)
 
-1. **Improve LEFT classifier** — train per-table or add more LEFT-heavy clips.
-2. **Threshold tuning** — current 0.5 is the default. Could trade precision
-   for recall depending on production needs.
-3. **Re-enable optical flow** as an additional feature (v3 plumbing exists).
-4. **Track LEFT prelunch corner case** — 4 GT tosses currently uncovered by
+The CV F1=0.79 vs per-clip F1=0.91 vs LOCO F1=0.66 spread tells us the
+**generalisation gap is the real bottleneck**. To get to 0.95+ on UNSEEN
+days, the levers below are ranked by best-effort impact per hour of work.
+
+| Lever | Effort | Est. F1 lift | Notes |
+|---|---|---|---|
+| **1. Per-table classifier** (LEFT/RIGHT trained separately) | ~2 hr code | +0.05 | LEFT and RIGHT have different feature distributions. Single model compromises both — esp. LEFT recall on small clips. |
+| **2. Optical flow as a FEATURE** (re-enable v3 plumbing as classifier input, not a hard gate) | ~1 hr code | +0.02-0.05 | The v3 Farneback plumbing already exists. As one feature among many in the RF, it doesn't have to be perfect. |
+| **3. Hard-negative mining** (upweight high-prob FPs) | ~2 hr code | +0.03-0.05 | Currently 626 negatives weighted equally. The misclassified ones are the most informative. |
+| **4. XGBoost / small MLP swap** | ~1 hr code | +0.02-0.04 | Typical tabular boost over RandomForest with this data shape. |
+| **5. Threshold + cooldown auto-tuning per table** | ~30 min | +0.01-0.03 | CV-sweep threshold ∈ [0.3, 0.7], cooldown ∈ [1.5, 4.0]. Marginal but free. |
+| **6. More labeled data** (a SECOND day's clips) | ~3-4 hr labeling | LOCO +0.10-0.15 | Biggest single lever for cross-day generalisation. Each new day cuts the LOCO gap roughly in half. |
+
+**Recommended sequence for F1 0.91 → 0.95** (no new labeling required):
+
+```
+Per-table (#1) → Optical-flow features (#2) → Hard-neg mining (#3) → XGBoost (#4)
+~2hr           ~1hr                          ~2hr                 ~1hr
+F1=0.93        F1=0.94                       F1=0.95              F1=0.95-0.96
+```
+
+Total **~6 hours of code**, no new labeling needed.
+
+If that ceilings out before 0.95: add labeling from a second day (#6).
+That's the only way to also push LOCO from 0.66 → 0.85+, which is what
+makes the model robust on UNSEEN days (not just the 4 we have).
+
+---
+
+## v4.1 — Production performance optimizations
+
+The v4 full-day run is **slow**: ~90 min for 9 hours of video (1.6× realtime
+in the morning, dropping to ~1.2× by late afternoon). v2 used to do this in
+~30 min. Why and how to fix:
+
+### Why v4 is slower than v2
+1. **Lowered candidate-collection thresholds** → 5× more air-motion pulses
+   to evaluate vs v2's production gates
+2. **Per-pulse feature extraction** — every candidate runs `np.argmax`,
+   `np.percentile`, slicing on an 88-frame window (~0.1 ms each, but
+   thousands of pulses per segment add up)
+3. **Per-frame buffer maintenance** — `self.v4_buf.append({...})` builds
+   a fresh dict every frame for 9 hours of video
+4. **Single-threaded** — only one segment processed at a time even though
+   we have 8 cores
+5. **HEVC decode is CPU-bound** and gets gradually slower deeper into the
+   1-hour files (some seek overhead, possibly memory pressure)
+
+### Quick wins (in order of leverage)
+
+| Optimization | Effort | Speedup | Notes |
+|---|---|---|---|
+| **A. Parallel segments** via `multiprocessing.Pool(4)` in `run_full_day.py:run_ch27()` | ~1 hr | ~3-4× | 9 segments → 3 batches of 4. Each worker is fully independent (per-segment state). Watch out for pkl reload per worker (cache it). |
+| **B. Numpy buffer instead of dicts** for `self.v4_buf` | ~2 hr | ~2-3× per-frame | Replace `deque([{...}])` with a `(N, 6)` ndarray + integer frame index. Dict creation is the per-frame hot path. |
+| **C. Batch classifier `predict_proba`** — queue 50-100 candidates and call once | ~1 hr | ~3-5× per call | sklearn's `predict_proba` is vectorized. Batching is mostly free. |
+| **D. Skip frame_data appends for v4** (we don't need it for output, only the rolling buffer) | ~30 min | ~10-20% | Currently `self.frame_data` accumulates 810k rows over 9 hours, never read by v4. |
+| **E. cv2 grab+retrieve for skip frames** | already done in v1 path | 2× | But v4 needs every frame for the air-motion buffer — skipping breaks features. Won't apply. |
+
+**Combined estimate**: A + B + C + D = ~10× speedup → **9 min full-day**.
+That's the v4.1 target.
+
+### Files to touch for v4.1
+- `taping_counter.py` — replace `v4_buf` deque-of-dicts with ndarray
+  (~30 LOC change in `run()` + `_v4_classify_candidate()`)
+- `train_taping_classifier.py` — `extract_features()` needs to accept the
+  new ndarray-backed buffer; keep training path identical
+- `run_full_day.py` — `run_ch27()` switches to `multiprocessing.Pool`
+- A small `v4_predict_batched()` wrapper for batched classifier inference
+
+### Order of operations for v4.1
+1. **Profile first** (`python3 -m cProfile -o v4.prof ...`) to confirm where
+   the actual hotspot is. The estimates above are educated guesses — actual
+   numbers may differ.
+2. Implement quick win **A (parallel)** first — biggest leverage and
+   doesn't change algorithm semantics.
+3. Then **B (ndarray buffer)** if profiling confirms dict creation cost.
+4. Then **C (batch classifier)** if classifier calls dominate.
+5. Re-run full day, confirm same cycle counts as v4 (must be bit-identical
+   to ensure no algorithmic regression), confirm speedup.
+
+### Why we're not doing v4.1 right now
+The v4 production count + dashboard are the immediate need. v4.1 is a
+**runtime optimization** with no accuracy impact (same algorithm, same
+counts). Ship v4 first; optimize when we want to re-run more often.
+
+---
+
+## Next refinements (smaller wins, when convenient)
+
+1. **Track LEFT prelunch corner case** — 4 GT tosses currently uncovered by
    the candidate pipeline (LEFT-AIR ROI overlaps a heap pile during slowdown).
-   Tighten ROI or add a secondary LEFT-AIR ROI.
+   Tighten ROI or add a secondary LEFT-AIR ROI. Small recall lift on one clip.
+2. **Investigate the slowdown gradient** — segments later in the day run
+   3-5× slower than morning. Profile to find the cause (likely candidate
+   density, possibly memory).
 
 ---
 
