@@ -1006,6 +1006,28 @@ class TapingCounter:
         if self.version == "v2":
             for k, v in V2_CONFIG.items():
                 config.setdefault(k, v)
+        # v4 = v2 candidate-collection (no gates) + classifier post-filter
+        elif self.version == "v4":
+            for k, v in V2_CONFIG.items():
+                config.setdefault(k, v)
+            # OVERRIDE the gates so v2 emits every candidate; classifier decides.
+            # Use direct assignment (NOT setdefault — V2_CONFIG already set
+            # these keys, so setdefault would be a no-op and the v2 gates
+            # would silently keep firing).
+            v4_overrides = {
+                "air_toss_thresh_left":         3.0,
+                "air_toss_thresh_right":        2.0,
+                "air_toss_thresh_left_low":     3.0,
+                "air_toss_thresh_right_low":    2.0,
+                "load_strong":                  0.0,
+                "context_signal_thresh":        0.0,
+                "min_gap_sec":                  0.5,
+                "min_cycle_sec":                0.5,
+                "idle_to_conservative_sec":     99999,
+                "frame_data_every":             1,  # need full rate
+            }
+            for k, v in v4_overrides.items():
+                config[k] = v
 
         # Roi & params
         self.left_roi  = config.get("left_table_roi",  LEFT_TABLE_ROI)
@@ -1067,6 +1089,76 @@ class TapingCounter:
         self.lighting_pause_start_t = None
         self.lighting_restore_counter = 0
 
+        # ── v4: classifier + state ──
+        # Loaded lazily so v1/v2 don't pay the import cost
+        self.v4_classifier = None
+        self.v4_threshold = 0.5
+        self.v4_feature_names = None
+        self.v4_min_gap_sec = 3.0  # final cooldown AFTER classifier accepts
+        self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
+        # Rolling per-frame data buffer for online feature extraction
+        # Holds the last N frames in the same dict shape as self.frame_data,
+        # so the SAME extract_features() function works at training and inference
+        self.v4_buf = deque(maxlen=200)  # 8s @ 25fps — plenty for 2s pre + 1.5s post window
+        if self.version == "v4":
+            self._load_v4_classifier(config)
+
+    # ── v4 classifier helpers ───────────────────────────────────
+
+    def _load_v4_classifier(self, config):
+        """Load the trained pulse-shape classifier and feature spec."""
+        import joblib
+        from pathlib import Path
+        pkl_path = config.get("v4_classifier_path",
+                               Path(__file__).resolve().parent
+                               / "taping_pulse_classifier_toss_v4.pkl")
+        meta_path = config.get("v4_metadata_path",
+                                Path(__file__).resolve().parent
+                                / "classifier_metadata.json")
+        if not Path(pkl_path).exists():
+            raise FileNotFoundError(
+                f"v4 classifier not found at {pkl_path}. "
+                "Run `python3 train_taping_classifier.py` first.")
+        self.v4_classifier = joblib.load(pkl_path)
+        if Path(meta_path).exists():
+            meta = json.loads(Path(meta_path).read_text())
+            self.v4_feature_names = meta["feature_names"]
+            self.v4_threshold = float(
+                meta.get("decision_threshold",
+                         config.get("v4_threshold", 0.5)))
+        else:
+            # Fallback feature order (must match training)
+            self.v4_feature_names = [
+                "peak_height", "peak_above_baseline",
+                "duration_above_thresh_sec", "rise_time_sec",
+                "decay_time_sec", "skewness", "auc_above_thresh",
+                "pre_peak_table_max", "post_peak_table_min", "table_drop",
+                "table_signal_at_peak", "simultaneous_air_other_table",
+                "air_diff_to_other",
+            ]
+        self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 3.0))
+        if self.debug:
+            print(f"[v4] classifier loaded ({pkl_path.name}), "
+                  f"threshold={self.v4_threshold:.2f}, "
+                  f"min_gap={self.v4_min_gap_sec:.1f}s")
+
+    def _v4_classify_candidate(self, candidate):
+        """Run the trained classifier on one v2-emitted candidate.
+
+        Returns (predicted_positive: bool, probability: float, features: dict).
+        Uses the SAME extract_features() function used at training time, so
+        the inference signal pipeline is bit-identical to the training
+        pipeline (no drift).
+        """
+        # Lazy import to avoid module-load cost for v1/v2
+        from train_taping_classifier import extract_features, FEATURE_NAMES
+        feats = extract_features(candidate, list(self.v4_buf))
+        # Order features as the classifier expects
+        x = np.array([[feats[n] for n in (self.v4_feature_names or FEATURE_NAMES)]],
+                     dtype=float)
+        prob = float(self.v4_classifier.predict_proba(x)[0, 1])
+        return (prob > self.v4_threshold), prob, feats
+
     # ── Lighting helpers ────────────────────────────────────────
 
     def _check_lighting(self, frame_idx, t_sec, frame_luma):
@@ -1127,7 +1219,9 @@ class TapingCounter:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration_sec = total_frames / self.fps if self.fps > 0 else 0
 
-        if self.version == "v2":
+        if self.version in ("v2", "v4"):
+            # v4 reuses v2 tracker (with lowered thresholds set in __init__);
+            # the classifier is applied AFTER each candidate emerges
             self.left  = _TableTrackerV2("left",  self.left_roi,  self.left_air_roi,  self.fps, self.v2_cfg)
             self.right = _TableTrackerV2("right", self.right_roi, self.right_air_roi, self.fps, self.v2_cfg)
         else:
@@ -1171,8 +1265,8 @@ class TapingCounter:
 
             paused = self._check_lighting(frame_idx, t_sec, frame_luma)
 
-            if self.version == "v2":
-                # v2 — common-mode air-motion artifact rejection.
+            if self.version in ("v2", "v4"):
+                # v2 / v4 — common-mode air-motion artifact rejection.
                 # The HEVC keyframe interval (~50 frames) creates synchronized
                 # air-motion spikes in BOTH tables. We pre-compute air motion
                 # for both tables, subtract the min, then feed back as the
@@ -1206,18 +1300,72 @@ class TapingCounter:
                     self.left._common_subtract  = 0.0
                     self.right._common_subtract = 0.0
 
+                # v4 needs to KNOW the per-frame signals to populate the
+                # rolling buffer (used by classifier feature extraction). We
+                # append the buffer row BEFORE the tracker update so a pulse
+                # that fires this frame can still see history with this row.
+                # But we need the trackers' last_* fields populated FIRST —
+                # so we run the trackers first (they update last_mean/std/...),
+                # then append the v4 buffer row, then process candidates.
+
+                tracker_results = []
                 for tracker in (self.left, self.right):
                     ev = tracker.update(gray, frame_idx, t_sec, paused)
+                    tracker_results.append(ev)
+
+                # v4: append rolling buffer row matching frame_data schema
+                if self.version == "v4":
+                    self.v4_buf.append({
+                        "frame": frame_idx,
+                        "time_sec": round(t_sec, 4),
+                        "left_mean":     self.left.last_mean,
+                        "right_mean":    self.right.last_mean,
+                        "left_signal":   self.left.last_signal,
+                        "right_signal":  self.right.last_signal,
+                        "left_air_motion":  self.left.last_air_motion,
+                        "right_air_motion": self.right.last_air_motion,
+                    })
+
+                # Now process emitted candidates
+                for ev in tracker_results:
                     if ev is None:
                         continue
                     kind, payload = ev
-                    if kind == "event":
-                        self.events.append(payload)
-                        if self.debug:
-                            print(f"  [{payload['time_sec']:6.1f}s] toss {payload['table']:5s} "
-                                  f"dur={payload['cycle_duration_sec']:5.1f}s "
-                                  f"air_peak={payload['air_motion_peak']:.1f} "
-                                  f"ctx={payload['peak_signal']:.1f}")
+                    if kind != "event":
+                        continue
+
+                    if self.version == "v4":
+                        # Classifier post-filter
+                        # Cooldown — drop candidates within v4_min_gap of the
+                        # last accepted toss on the same table
+                        tbl = payload["table"]
+                        if (payload["time_sec"] - self.v4_last_emit_t[tbl]
+                                < self.v4_min_gap_sec):
+                            continue
+                        try:
+                            keep, prob, feats = self._v4_classify_candidate(payload)
+                        except Exception as ex:
+                            if self.debug:
+                                print(f"  [v4 ERR] {ex}")
+                            continue
+                        payload["v4_prob"] = round(prob, 3)
+                        if not keep:
+                            self.suppressed.append({
+                                **payload,
+                                "reason": "classifier_reject",
+                            })
+                            continue
+                        # Accepted by classifier
+                        payload["features"] = {k: round(v, 3) for k, v in feats.items()}
+                        self.v4_last_emit_t[tbl] = payload["time_sec"]
+
+                    self.events.append(payload)
+                    if self.debug:
+                        prob_str = (f" prob={payload['v4_prob']:.2f}"
+                                    if "v4_prob" in payload else "")
+                        print(f"  [{payload['time_sec']:6.1f}s] toss {payload['table']:5s} "
+                              f"air_peak={payload['air_motion_peak']:.1f} "
+                              f"ctx={payload['peak_signal']:.1f}{prob_str}")
             else:
                 l_ret = self.left.update(gray, frame_idx, t_sec, paused)
                 r_ret = self.right.update(gray, frame_idx, t_sec, paused)
@@ -1259,7 +1407,7 @@ class TapingCounter:
 
             # Frame data sampling (for dashboard signal chart)
             if frame_idx % self.frame_data_every == 0:
-                if self.version == "v2":
+                if self.version in ("v2", "v4"):
                     self.frame_data.append({
                         "frame": frame_idx,
                         "time_sec": round(t_sec, 2),
@@ -1400,10 +1548,11 @@ def main():
     parser.add_argument("--output", "-o", help="Output JSON path")
     parser.add_argument("--debug", "-d", action="store_true",
                         help="Verbose per-event log")
-    parser.add_argument("--version", default="v1", choices=["v1", "v2"],
+    parser.add_argument("--version", default="v1", choices=["v1", "v2", "v4"],
                         help="Algorithm variant. v1 = combined mean+std activity score (legacy). "
-                             "v2 = MOG2 background subtraction + rapid-drop toss detector "
-                             "(precision-tuned against the 5-min GT clip).")
+                             "v2 = air-motion peak with hand-tuned thresholds. "
+                             "v4 = candidate collection (lowered v2 thresholds) + "
+                             "RandomForest pulse classifier trained on labeled GT clips.")
     parser.add_argument("--frame-step", type=int, default=1,
                         help="Process every Nth frame (default 1). Use 2 to halve "
                              "HEVC decode time on long files; cycle detection is "

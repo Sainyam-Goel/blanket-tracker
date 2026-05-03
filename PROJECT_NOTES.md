@@ -2,9 +2,128 @@
 
 ---
 
-# 🚧 RESUME HERE — CH27 v4 in flight (paused 2026-05-03 night)
+# ✅ CH27 v4 SHIPPED (2026-05-03, after labeled-data classifier)
 
-## Where we paused
+## Headline result
+
+**Per-clip OVERALL F1 = 0.91** across the 4 labeled training clips
+(P=0.94, R=0.88, TP=142, FP=9, FN=20).
+
+Compare to v2 baseline on the SAME clips: **F1=0.21** (TP=19, FN=143).
+**v4 is ~4.3× more accurate than v2** at the per-clip level.
+
+| Clip | LEFT F1 (v4 → v2) | RIGHT F1 (v4 → v2) |
+|---|---|---|
+| morning   | 0.50 → 0.20 | 0.94 → 0.53 |
+| prelunch  | 0.57 → 0.00 | 0.98 → 0.00 |
+| postlunch | 1.00 → 0.29 | 0.97 → 0.00 |
+| afternoon | 0.98 → 0.20 | 1.00 → 0.20 |
+
+(LEFT clips 1+2 small samples — v4 still beats v2 by huge margins everywhere.)
+
+## What v4 is
+
+1. **Run v2 algorithm with drastically lowered thresholds** to emit EVERY
+   plausible air-motion pulse as a candidate (~5× more candidates than
+   production v2 emits)
+2. **Extract 13 hand-engineered features per candidate** from peak±2s window:
+   - Air shape: peak_height, peak_above_baseline, duration_above_thresh,
+     rise_time, decay_time, skewness, AUC
+   - Table context: pre_peak_max, post_peak_min, table_drop, signal_at_peak
+   - Cross-table artifact rejection: simultaneous_other_air, air_diff_to_other
+3. **Trained RandomForest** (n=300, max_depth=8, class_weight=balanced)
+   classifies each candidate as toss / not-toss
+4. **Cooldown** of 3s after each accepted toss
+
+The SAME `extract_features()` function runs at training time and inference
+time → no drift. The classifier file is `taping_pulse_classifier_toss_v4.pkl`
+(768 KB, joblib compressed).
+
+## How v4 was built
+
+Tracked in commit history:
+- `6ec89fc` — GT data committed (5 clips, 333 action windows after clustering)
+  + training scaffold + 97.4% candidate-coverage diagnostic
+- This commit — Phases 3-5 done: feature extraction, RandomForest training
+  with leave-one-clip-out, v4 in `taping_counter.py`, full-day v4 run,
+  dashboard updated.
+
+## Top features (by importance from final model)
+
+| Feature | Importance |
+|---|---:|
+| duration_above_thresh_sec | 0.198 |
+| auc_above_thresh          | 0.189 |
+| table_drop                | 0.169 |
+| pre_peak_table_max        | 0.077 |
+| peak_height               | 0.053 |
+| air_diff_to_other         | 0.048 |
+| post_peak_table_min       | 0.047 |
+
+The top 3 carry 56% of the importance — pulse SHAPE (duration + AUC) +
+SUSTAINED TABLE CHANGE (drop) are the strongest signals.
+
+## Honest caveats
+
+- **CV F1 = 0.79 ± 0.02** (5-fold stratified on 583 train candidates).
+  The 0.91 per-clip overall is HIGHER because positives cluster (one real
+  toss → multiple candidate matches), so per-cluster recall is high even
+  when per-candidate F1 is moderate.
+- **LEFT generalisation**: clips 1 and 2 have low LEFT F1 (0.50 / 0.57)
+  due to few GT events (5 / 22) and inconsistent LEFT signal noise.
+  More LEFT-heavy training data would help.
+- **Held-out cross-clip is harder**: LOCO mean F1 ≈ 0.66 (range 0.51-0.82).
+  The 0.91 overall comes from the FULL fit on all 4 clips. New unseen days
+  will likely fall in the LOCO range.
+
+## Quick commands
+
+```bash
+# Train classifier (uses gt_clips/*.labels.json)
+python3 train_taping_classifier.py
+
+# Diagnostic comparisons
+python3 train_taping_classifier.py --v2-baseline   # v2 per-clip F1
+python3 train_taping_classifier.py --loco          # leave-one-clip-out
+
+# Run v4 on a single clip
+python3 taping_counter.py gt_clips/gt_clip1_morning.mp4 --version v4
+
+# Full-day v4 (saves to taping_fullday.json; v2 backed up to _v2.json)
+python3 run_full_day.py --ch27-only --ch27-version v4
+
+# Regenerate dashboard
+python3 generate_dashboard.py && cp blanket_tracker_dashboard.html index.html
+```
+
+## Files added/changed in v4
+
+**New (tracked):**
+- `taping_pulse_classifier_toss_v4.pkl` (768 KB, joblib compressed)
+- `classifier_metadata.json` (feature names, training metadata, scores)
+- `train_taping_classifier.py` (the training pipeline + diagnostics)
+
+**Modified:**
+- `taping_counter.py` — added v4 path: lowered v2 thresholds + classifier gate
+- `run_full_day.py` — `--ch27-version v4` is the default; v2 backed up to
+  `taping_fullday_v2.json`
+- `generate_dashboard.py` — CH27 panel shows v4 vs v1+v2 comparison
+
+## Next refinements (when needed)
+
+1. **Improve LEFT classifier** — train per-table or add more LEFT-heavy clips.
+2. **Threshold tuning** — current 0.5 is the default. Could trade precision
+   for recall depending on production needs.
+3. **Re-enable optical flow** as an additional feature (v3 plumbing exists).
+4. **Track LEFT prelunch corner case** — 4 GT tosses currently uncovered by
+   the candidate pipeline (LEFT-AIR ROI overlaps a heap pile during slowdown).
+   Tighten ROI or add a secondary LEFT-AIR ROI.
+
+---
+
+# Historical context (pre-v4)
+
+## Where we paused (before v4 shipped)
 
 After v2 hit F1=0.85 and v3 plumbing didn't lift it, the user labeled **5 clips
 with their own browser-based labeler** (`gt_labeler_web.py`) and we built the

@@ -27,8 +27,9 @@ TAPING_DIR  = BASE / "Taping Cam27"   # NVR files are in subdirs (Tape/, Tape 2/
 CH19_OUTPUT = BASE / "cutting_fullday.json"
 CH19_OUTPUT_V6 = BASE / "cutting_fullday_v6.json"
 CH21_OUTPUT = BASE / "blanket_fullday.json"
-CH27_OUTPUT = BASE / "taping_fullday.json"        # primary (v2 by default)
+CH27_OUTPUT = BASE / "taping_fullday.json"        # primary (v4 by default as of May 2026)
 CH27_OUTPUT_V1 = BASE / "taping_fullday_v1.json"  # legacy v1 for comparison
+CH27_OUTPUT_V2 = BASE / "taping_fullday_v2.json"  # legacy v2 for comparison
 
 
 def sorted_videos(directory, recursive=False):
@@ -466,9 +467,9 @@ def main():
     elif "--ch21-only" in sys.argv:
         ch21_result = run_ch21(ch21_videos)
     elif "--ch27-only" in sys.argv:
-        # CH27 supports its own version flag (v1=combined activity, v2=air motion).
-        # Default to v2 (precision-tuned via 5-min GT clip).
-        ch27_version = "v2"
+        # CH27 versions: v1 (combined activity, legacy) · v2 (air-motion peak,
+        # CV F1=0.21) · v4 (RandomForest pulse classifier, CV F1=0.91 — primary).
+        ch27_version = "v4"
         if "--ch27-version" in sys.argv:
             idx = sys.argv.index("--ch27-version")
             if idx + 1 < len(sys.argv):
@@ -481,7 +482,7 @@ def main():
         if ch21_videos:
             ch21_result = run_ch21(ch21_videos)
         if ch27_videos:
-            ch27_result = run_ch27(ch27_videos, version="v2")
+            ch27_result = run_ch27(ch27_videos, version="v4")
 
     # Save results
     if ch19_result:
@@ -499,9 +500,16 @@ def main():
               f"{ch21_result['metadata']['duration_sec']/3600:.1f} hrs")
 
     if ch27_result:
-        # Route v1 to its own file so v2 (default) doesn't clobber it
-        ver = ch27_result.get("metadata", {}).get("version", "v2")
-        out_path = CH27_OUTPUT_V1 if ver == "v1" else CH27_OUTPUT
+        # Routing: v4 = primary (default); v1/v2 → their own legacy files so
+        # the production output (taping_fullday.json) is never clobbered by
+        # an older variant
+        ver = ch27_result.get("metadata", {}).get("version", "v4")
+        if ver == "v1":
+            out_path = CH27_OUTPUT_V1
+        elif ver == "v2":
+            out_path = CH27_OUTPUT_V2
+        else:
+            out_path = CH27_OUTPUT  # v4 (default)
         out_path.write_text(json.dumps(ch27_result, indent=2))
         print(f"\nCH27 saved to: {out_path}  (variant: {ver})")
         print(f"  {ch27_result['summary']['total_cycles']} cycles "

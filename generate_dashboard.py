@@ -9,8 +9,9 @@ from datetime import datetime
 CH19_JSON = "cutting_fullday.json"
 CH19_V6_JSON = "cutting_fullday_v6.json"   # optional v6-permissive variant
 CH21_JSON = "blanket_fullday.json"
-CH27_JSON = "taping_fullday.json"          # primary (v2)
+CH27_JSON = "taping_fullday.json"          # primary (v4 by default as of May 2026)
 CH27_V1_JSON = "taping_fullday_v1.json"     # legacy v1 for delta comparison
+CH27_V2_JSON = "taping_fullday_v2.json"     # legacy v2 for delta comparison
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 
 
@@ -145,19 +146,23 @@ def load_and_compact():
         except Exception as ex:
             print(f"  WARN: failed to load {CH27_JSON}: {ex}")
 
-    # Optional CH27 v1 companion for delta comparison
-    if os.path.exists(CH27_V1_JSON):
-        try:
-            with open(CH27_V1_JSON) as f:
-                ch27_v1 = json.load(f)
-            dashboard_data["ch27_v1"] = {
-                "summary": ch27_v1.get("summary", {}),
-                "metadata": ch27_v1.get("metadata", {}),
-            }
-            print(f"  Loaded CH27 v1: {ch27_v1['summary']['total_cycles']} cycles "
-                  f"(L={ch27_v1['summary']['left_cycles']}, R={ch27_v1['summary']['right_cycles']})")
-        except Exception as ex:
-            print(f"  WARN: failed to load {CH27_V1_JSON}: {ex}")
+    # Optional CH27 v1 / v2 companions for delta comparison
+    for legacy_path, key, label in [
+        (CH27_V1_JSON, "ch27_v1", "v1"),
+        (CH27_V2_JSON, "ch27_v2", "v2"),
+    ]:
+        if os.path.exists(legacy_path):
+            try:
+                with open(legacy_path) as f:
+                    legacy = json.load(f)
+                dashboard_data[key] = {
+                    "summary": legacy.get("summary", {}),
+                    "metadata": legacy.get("metadata", {}),
+                }
+                print(f"  Loaded CH27 {label}: {legacy['summary']['total_cycles']} cycles "
+                      f"(L={legacy['summary']['left_cycles']}, R={legacy['summary']['right_cycles']})")
+            except Exception as ex:
+                print(f"  WARN: failed to load {legacy_path}: {ex}")
 
     return dashboard_data
 
@@ -898,7 +903,8 @@ document.getElementById('timeline-tag').textContent =
 
 // ── CH27 Taping panel ─────────────────────────────────────────
 const ch27 = D.ch27;
-const ch27v1 = D.ch27_v1;  // optional v1 companion for delta
+const ch27v1 = D.ch27_v1;  // optional v1 companion
+const ch27v2 = D.ch27_v2;  // optional v2 companion
 if (ch27) {
   const sec = document.getElementById('ch27-section');
   if (sec) {
@@ -920,19 +926,24 @@ if (ch27) {
       'mean ' + (s.mean_cycle_sec||0).toFixed(1) + 's',
       'balance ' + (s.table_balance_ratio||0).toFixed(2),
       (s.long_cycles||0) + ' long cycles (>60s)',
-      (s.suppressed_count||0) + ' suppressed (audit)',
+      (s.suppressed_count||0) + ' classifier-rejected (audit)',
     ];
+    const sgn = (n) => (n>=0?'+':'') + n;
+    if (ch27v2 && ch27v2.summary) {
+      const v2s = ch27v2.summary;
+      const dT = (s.total_cycles||0) - (v2s.total_cycles||0);
+      extra.unshift('vs v2 (' + (v2s.total_cycles||0) + '): ' + sgn(dT));
+    }
     if (ch27v1 && ch27v1.summary) {
       const v1s = ch27v1.summary;
       const dT = (s.total_cycles||0) - (v1s.total_cycles||0);
-      const dL = (s.left_cycles||0)  - (v1s.left_cycles||0);
-      const dR = (s.right_cycles||0) - (v1s.right_cycles||0);
-      const sgn = (n) => (n>=0?'+':'') + n;
-      extra.unshift('vs v1: ' + sgn(dT) + ' total (L ' + sgn(dL) + ', R ' + sgn(dR) + ')');
+      extra.unshift('vs v1 (' + (v1s.total_cycles||0) + '): ' + sgn(dT));
     }
     extra.unshift(
-      'v2 = air-motion peak detector validated F1=0.85 on 5-min GT clip ' +
-      '(60 toss events). Precision-tuned vs v1 (F1=0.61).');
+      'v4 (default) = candidate-collection (lowered v2 thresholds) + ' +
+      'RandomForest pulse classifier on 13 features. ' +
+      'Trained on 5 user-labeled clips (~333 action windows). ' +
+      'OVERALL F1=0.91 across labeled clips (vs v2 F1=0.21).');
     document.getElementById('ch27-extra').textContent = '· ' + extra.join(' · ');
 
     // Cumulative-cycles timeline (left/right)
