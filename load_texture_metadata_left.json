@@ -1,0 +1,43 @@
+{
+  "table": "left",
+  "model_type": "load_texture",
+  "feature_names": [
+    "table_texture_step",
+    "table_mean_step",
+    "color_bgr_shift",
+    "color_dominant_channel",
+    "table_solidity_after",
+    "air_motion_pre_trigger",
+    "air_motion_ratio",
+    "trigger_height",
+    "trigger_duration",
+    "lr_quad_std_step",
+    "lr_quad_mean_step",
+    "lr_quad_color_shift",
+    "landing_std_step",
+    "landing_mean_step",
+    "landing_color_shift"
+  ],
+  "n_features": 15,
+  "cv_f1_mean": 0.8058169934640522,
+  "cv_f1_std": 0.0878219317697669,
+  "n_samples": 74,
+  "n_positives": 44,
+  "feature_importances": {
+    "table_texture_step": 0.03376411274075508,
+    "table_mean_step": 0.028054703027009964,
+    "color_bgr_shift": 0.03658480942249298,
+    "color_dominant_channel": 0.05367536097764969,
+    "table_solidity_after": 0.0,
+    "air_motion_pre_trigger": 0.0,
+    "air_motion_ratio": 0.0,
+    "trigger_height": 0.04638758674263954,
+    "trigger_duration": 0.0,
+    "lr_quad_std_step": 0.08072421699762344,
+    "lr_quad_mean_step": 0.05557623133063316,
+    "lr_quad_color_shift": 0.13469688594341278,
+    "landing_std_step": 0.08343707025051117,
+    "landing_mean_step": 0.3217333257198334,
+    "landing_color_shift": 0.1253657191991806
+  }
+}

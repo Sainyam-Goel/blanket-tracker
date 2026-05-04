@@ -2,6 +2,103 @@
 
 ---
 
+# ✅ CH27 — Load Model v1: Texture-Triggered + Two-Zone Features (2026-05-04)
+
+## Headline
+
+**Texture-triggered load detector with user-calibrated two-zone features.**
+RIGHT load model at **0.924 F1** — the best single-table model in the project.
+LEFT load model at **0.806** — limited by candidate scarcity.
+
+| Model | LEFT F1 | RIGHT F1 | AVG | Trigger | Features |
+|---|---|---|---|---|---|
+| **LOAD** | 0.806 | **0.924** ★ | 0.865 | Table texture | 15 (zones) |
+| TOSS | 0.888 | 0.875 | 0.882 | Air motion | 27 |
+
+## Architecture: Why Load ≠ Toss
+
+A **Toss** is a ballistic event in the air (0.5s). A **Load** is a sustained state transition on the table (1.5-3.0s). Using the v2 air-motion tracker to find loads is wrong — the air is full of noise. The table is a physically restricted zone.
+
+### Candidate Generation (Texture-Triggered)
+Rather than using the v2 air-motion tracker, the load model uses a dedicated table-texture trigger:
+
+```python
+# Rolling baseline (p20 of 3s window) + margin (8.0)
+# When raw table std-dev exceeds baseline + 8.0 → blanket placed
+baseline = np.percentile(recent_std_devs, 20)
+if current_std > baseline + 8.0:
+    emit_load_candidate()
+```
+
+This catches both normal loads (empty→covered) and overlapping loads (blanket A→blanket B) because fabric sliding creates texture variance.
+
+### Two-Zone Features (78% of Model Importance)
+The load model's predictive power comes from two user-calibrated zones:
+
+| Zone | LEFT Imp | RIGHT Imp | What it Captures |
+|---|---|---|---|
+| **Landing Polygon** | 53.1% | 38.0% | Blanket settling on table surface (user-drawn polygon ROI) |
+| **LR Quadrant** | 27.1% | 38.8% | Blanket sliding/throwing motion (lower-left for LEFT, lower-right for RIGHT) |
+
+The landing polygon is the #1 feature on LEFT — a user-drawn quadrilateral ROI perfectly capturing where blankets settle on the dark LEFT table surface.
+
+### Feature Importance Breakdown
+
+**LEFT model (15 features):**
+| # | Feature | Importance | Zone |
+|---|---|---|---|
+| 1 | `landing_mean_step` | 0.322 | Landing Poly ★ |
+| 2 | `lr_quad_color_shift` | 0.135 | LR Quadrant |
+| 3 | `landing_color_shift` | 0.125 | Landing Poly |
+| 4 | `landing_std_step` | 0.083 | Landing Poly |
+| 5 | `lr_quad_std_step` | 0.081 | LR Quadrant |
+
+**RIGHT model (15 features):**
+| # | Feature | Importance | Zone |
+|---|---|---|---|
+| 1 | `landing_mean_step` | 0.380 | Landing Poly ★ |
+| 2 | `lr_quad_mean_step` | 0.273 | LR Quadrant |
+| 3 | `table_mean_step` | 0.232 | Table ROI |
+| 4 | `lr_quad_std_step` | 0.115 | LR Quadrant |
+
+## The Cycle-Confirm Architecture
+
+With both Load and Toss models available, we can cross-validate:
+
+```python
+# A valid blanket cycle = Load → Toss (within 10-45 seconds)
+if toss_detected:
+    if load_detected_recently(tbl):
+        production_count += 1  # confirmed
+    else:
+        suppress  # toss hallucinated — no preceding load
+```
+
+**Why this kills false positives:** A toss during a break period has no preceding load. A restock creates a load but no toss. Only genuine blanket processing creates both events in sequence.
+
+## Model Files (separate from toss models)
+
+| File | Table | F1 |
+|---|---|---|
+| `taping_load_texture_classifier_v1_left.pkl` | LEFT | 0.806 |
+| `taping_load_texture_classifier_v1_right.pkl` | RIGHT | 0.924 |
+| `taping_pulse_classifier_toss_v4_left.pkl` | LEFT | 0.888 |
+| `taping_pulse_classifier_toss_v4_right.pkl` | RIGHT | 0.875 |
+
+## Current Limitations
+
+1. **LEFT candidate scarcity**: Only 74 candidates (44 pos) vs RIGHT's 188. The texture trigger threshold needs per-table tuning.
+2. **No production integration yet**: Load model not yet wired into the main `taping_counter.py` pipeline.
+3. **Air features unused**: `air_motion_pre_trigger` and `air_motion_ratio` have 0 importance — the landing zone is so predictive that air features add nothing.
+
+## Next Steps
+
+1. Per-table texture trigger tuning (LEFT needs lower threshold for more candidates)
+2. Integrate load model into production pipeline for cycle-confirm validation
+3. Load model may benefit from MORE load labels (currently kept in labeler but not a bottleneck)
+
+---
+
 # ✅ CH27 v4.5 EXP — Expanded Air ROIs + Hour 5 Discovery (2026-05-04)
 
 ## Headline

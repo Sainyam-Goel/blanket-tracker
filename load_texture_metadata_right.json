@@ -1,0 +1,43 @@
+{
+  "table": "right",
+  "model_type": "load_texture",
+  "feature_names": [
+    "table_texture_step",
+    "table_mean_step",
+    "color_bgr_shift",
+    "color_dominant_channel",
+    "table_solidity_after",
+    "air_motion_pre_trigger",
+    "air_motion_ratio",
+    "trigger_height",
+    "trigger_duration",
+    "lr_quad_std_step",
+    "lr_quad_mean_step",
+    "lr_quad_color_shift",
+    "landing_std_step",
+    "landing_mean_step",
+    "landing_color_shift"
+  ],
+  "n_features": 15,
+  "cv_f1_mean": 0.9244297885912156,
+  "cv_f1_std": 0.02990221713578074,
+  "n_samples": 188,
+  "n_positives": 162,
+  "feature_importances": {
+    "table_texture_step": 0.0,
+    "table_mean_step": 0.23190371692180634,
+    "color_bgr_shift": 0.0,
+    "color_dominant_channel": 0.0,
+    "table_solidity_after": 0.0,
+    "air_motion_pre_trigger": 0.0,
+    "air_motion_ratio": 0.0,
+    "trigger_height": 0.0,
+    "trigger_duration": 0.0,
+    "lr_quad_std_step": 0.11455873399972916,
+    "lr_quad_mean_step": 0.2734387516975403,
+    "lr_quad_color_shift": 0.0,
+    "landing_std_step": 0.0,
+    "landing_mean_step": 0.3800988495349884,
+    "landing_color_shift": 0.0
+  }
+}

@@ -115,6 +115,8 @@ body {
     <option value="6250">Frame 6250 (250s)</option>
   </select>
   <button onclick="loadFrame()">Reload</button>
+  <button id="btnRect" class="active" onclick="setMode('rect')">Rectangle</button>
+  <button id="btnPoly" onclick="setMode('poly')">Polygon</button>
   <span class="spacer"></span>
   <button id="btnCopy" onclick="copyToClipboard()">Copy Code</button>
   <button id="btnSave" onclick="saveROIs()" style="background:#10b981;border-color:#10b981;">Save JSON</button>
@@ -135,10 +137,9 @@ body {
       <button style="margin-top:8px;width:100%;" onclick="copyToClipboard()">Copy to Clipboard</button>
     </div>
     <div class="hint">
-      <b>Click+drag</b> empty area to draw new rect<br>
-      <b>Click</b> rect or card to select<br>
-      <b>Drag corners</b> (white squares) to resize<br>
-      <b>Drag inside</b> to move selected rect<br>
+      <b>Rectangle mode:</b> click+drag to draw<br>
+      <b>Polygon mode:</b> click points, <b>Enter</b> or click first point to close<br>
+      <b>Drag corners</b> (white squares) to reshape<br>
       <b>Delete</b> to remove selected
     </div>
   </div>
@@ -147,6 +148,8 @@ body {
 <script>
 var rois = %%ROIS_JSON%%;
 var selected = null;
+var mode = "rect";  // "rect" or "poly"
+var polyPoints = [];
 var drawing = false, dragging = false, dragCorner = -1;
 var dragStart = null, dragOrig = null, dragCurrent = null;
 
@@ -156,6 +159,18 @@ var colors = {
 };
 
 function $(id) { return document.getElementById(id); }
+
+function setMode(m) {
+  mode = m;
+  $("btnRect").className = m === "rect" ? "active" : "";
+  $("btnPoly").className = m === "poly" ? "active" : "";
+  polyPoints = [];
+  drawing = false;
+  drawRois();
+}
+
+function isRect(shape) { return shape && shape.length === 4; }
+function isPoly(shape) { return shape && shape.length >= 6 && shape.length % 2 === 0; }
 
 function syncCanvas() {
   var img = $("frameImg");
@@ -192,30 +207,66 @@ function drawRois() {
   ctx.clearRect(0, 0, cv.width, cv.height);
 
   for (var name in rois) {
-    var r = rois[name], c = colors[name] || "#aaa", sel = name === selected;
-    ctx.fillStyle = c + "1A";
-    ctx.fillRect(r[0], r[1], r[2]-r[0], r[3]-r[1]);
-    ctx.strokeStyle = c;
-    ctx.lineWidth = sel ? 2.5 : 2;
-    ctx.strokeRect(r[0], r[1], r[2]-r[0], r[3]-r[1]);
-    ctx.fillStyle = c;
-    ctx.font = "bold 11px sans-serif";
-    ctx.fillText(name.toUpperCase(), r[0] + 4, r[1] + 15);
+    if (name.startsWith("_")) continue;
+    var shape = rois[name], c = colors[name] || "#aaa", sel = name === selected;
 
-    if (sel) {
-      var h = [[r[0],r[1]],[r[2],r[1]],[r[0],r[3]],[r[2],r[3]]];
-      for (var i = 0; i < 4; i++) {
-        ctx.fillStyle = "#fff"; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
-        ctx.fillRect(h[i][0]-4, h[i][1]-4, 8, 8); ctx.strokeRect(h[i][0]-4, h[i][1]-4, 8, 8);
+    if (isRect(shape)) {
+      var r = shape;
+      ctx.fillStyle = c + "1A";
+      ctx.fillRect(r[0], r[1], r[2]-r[0], r[3]-r[1]);
+      ctx.strokeStyle = c;
+      ctx.lineWidth = sel ? 2.5 : 2;
+      ctx.strokeRect(r[0], r[1], r[2]-r[0], r[3]-r[1]);
+      ctx.fillStyle = c;
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(name.toUpperCase(), r[0] + 4, r[1] + 15);
+      if (sel) {
+        var h = [[r[0],r[1]],[r[2],r[1]],[r[0],r[3]],[r[2],r[3]]];
+        for (var i = 0; i < 4; i++) {
+          ctx.fillStyle = "#fff"; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+          ctx.fillRect(h[i][0]-4, h[i][1]-4, 8, 8); ctx.strokeRect(h[i][0]-4, h[i][1]-4, 8, 8);
+        }
+      }
+    } else if (isPoly(shape)) {
+      ctx.beginPath();
+      ctx.moveTo(shape[0], shape[1]);
+      for (var i = 2; i < shape.length; i += 2) ctx.lineTo(shape[i], shape[i+1]);
+      ctx.closePath();
+      ctx.fillStyle = c + "1A"; ctx.fill();
+      ctx.strokeStyle = c; ctx.lineWidth = sel ? 2.5 : 2; ctx.stroke();
+      ctx.fillStyle = c; ctx.font = "bold 11px sans-serif";
+      ctx.fillText(name.toUpperCase(), shape[0] + 4, shape[1] + 15);
+      if (sel) {
+        for (var i = 0; i < shape.length; i += 2) {
+          ctx.fillStyle = "#fff"; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+          ctx.fillRect(shape[i]-4, shape[i+1]-4, 8, 8); ctx.strokeRect(shape[i]-4, shape[i+1]-4, 8, 8);
+        }
       }
     }
   }
 
-  if (drawing && dragStart && dragCurrent) {
+  // Drawing preview — rect
+  if (mode === "rect" && drawing && dragStart && dragCurrent) {
     var x1 = Math.min(dragStart.x, dragCurrent.x), y1 = Math.min(dragStart.y, dragCurrent.y);
     var x2 = Math.max(dragStart.x, dragCurrent.x), y2 = Math.max(dragStart.y, dragCurrent.y);
     ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]); ctx.strokeRect(x1, y1, x2-x1, y2-y1); ctx.setLineDash([]);
+  }
+
+  // Drawing preview — poly
+  if (mode === "poly" && polyPoints.length > 0) {
+    ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(polyPoints[0].x, polyPoints[0].y);
+    for (var i = 1; i < polyPoints.length; i++) ctx.lineTo(polyPoints[i].x, polyPoints[i].y);
+    if (drawing && dragCurrent) ctx.lineTo(dragCurrent.x, dragCurrent.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (var i = 0; i < polyPoints.length; i++) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.beginPath(); ctx.arc(polyPoints[i].x, polyPoints[i].y, 3, 0, Math.PI*2); ctx.fill();
+    }
   }
 }
 
@@ -241,10 +292,53 @@ function inside(cx, cy, r) {
   return cx >= r[0] && cx <= r[2] && cy >= r[1] && cy <= r[3];
 }
 
+function insidePoly(cx, cy, poly) {
+  var inside = false;
+  for (var i = 0, j = poly.length-2; i < poly.length; j = i, i += 2) {
+    if ((poly[i+1] > cy) !== (poly[j+1] > cy) &&
+        cx < (poly[j] - poly[i]) * (cy - poly[i+1]) / (poly[j+1] - poly[i+1]) + poly[i])
+      inside = !inside;
+  }
+  return inside;
+}
+
 var cv = $("overlayCanvas");
 
 cv.addEventListener("mousedown", function(e) {
   var p = coords(e);
+
+  // Polygon mode: click to add vertices
+  if (mode === "poly" && !e.shiftKey) {
+    if (polyPoints.length === 0) {
+      // Start new polygon
+      polyPoints = [{x: p.x, y: p.y}];
+      drawing = true;
+      dragCurrent = p;
+      drawRois();
+      return;
+    }
+    // Check if clicking near first point to close
+    var fp = polyPoints[0];
+    if (polyPoints.length >= 3 && Math.abs(p.x-fp.x) <= 10 && Math.abs(p.y-fp.y) <= 10) {
+      // Close polygon
+      var name = prompt("ROI name:", "");
+      if (name) {
+        var flat = [];
+        for (var i = 0; i < polyPoints.length; i++) { flat.push(polyPoints[i].x, polyPoints[i].y); }
+        rois[name] = flat;
+        selected = name;
+      }
+      polyPoints = []; drawing = false;
+      renderCards(); drawRois(); return;
+    }
+    // Add vertex
+    polyPoints.push({x: p.x, y: p.y});
+    dragCurrent = p;
+    drawRois();
+    return;
+  }
+
+  // Rectangle mode — existing logic
   var c = cornerAt(p.x, p.y);
   if (c >= 0) {
     dragging = true; dragCorner = c;
@@ -252,14 +346,24 @@ cv.addEventListener("mousedown", function(e) {
     return;
   }
   for (var name in rois) {
-    if (inside(p.x, p.y, rois[name])) {
+    if (name.startsWith("_")) continue;
+    var shape = rois[name];
+    if (isRect(shape) && inside(p.x, p.y, shape)) {
       selected = name; renderCards(); drawRois();
       dragging = true; dragCorner = -1;
-      dragStart = p; dragOrig = rois[name].slice();
+      dragStart = p; dragOrig = shape.slice();
+      return;
+    }
+    if (isPoly(shape) && insidePoly(p.x, p.y, shape)) {
+      selected = name; renderCards(); drawRois();
+      dragging = true; dragCorner = -1;
+      dragStart = p; dragOrig = shape.slice();
       return;
     }
   }
-  drawing = true; dragStart = p; dragCurrent = p; selected = null; renderCards();
+  if (mode === "rect") {
+    drawing = true; dragStart = p; dragCurrent = p; selected = null; renderCards();
+  }
 });
 
 cv.addEventListener("mousemove", function(e) {
@@ -296,12 +400,31 @@ cv.addEventListener("mouseup", function() {
 
 document.addEventListener("keydown", function(e) {
   if (e.key === "Delete" && selected && !e.target.closest("input,textarea")) deleteROI(selected);
+  if (e.key === "Enter" && mode === "poly" && polyPoints.length >= 3) {
+    e.preventDefault();
+    var name = prompt("ROI name:", "");
+    if (name) {
+      var flat = [];
+      for (var i = 0; i < polyPoints.length; i++) { flat.push(polyPoints[i].x, polyPoints[i].y); }
+      rois[name] = flat; selected = name;
+    }
+    polyPoints = []; drawing = false;
+    renderCards(); drawRois();
+  }
+  if (e.key === "Escape") { polyPoints = []; drawing = false; drawRois(); }
 });
 
 function updateExport() {
   var lines = [];
-  for (var name in rois)
-    lines.push(name.toUpperCase() + "_ROI_V2 = (" + rois[name].join(", ") + ")");
+  for (var name in rois) {
+    if (name.startsWith("_")) continue;
+    var s = rois[name];
+    if (isRect(s)) {
+      lines.push(name.toUpperCase() + "_ROI = (" + s.join(", ") + ")  # rect");
+    } else {
+      lines.push(name.toUpperCase() + "_ROI = [" + s.join(", ") + "]  # polygon");
+    }
+  }
   $("exportText").textContent = lines.join("\n");
 }
 
