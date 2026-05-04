@@ -2,6 +2,97 @@
 
 ---
 
+# ✅ CH27 v4.5 EXP — Expanded Air ROIs + Hour 5 Discovery (2026-05-04)
+
+## Headline
+
+**Expanded air ROIs (LEFT +30% R, RIGHT +35% L + 25% up) are neutral on CV F1 (0.914).** Production test: 41/41 GT on morning clip. **Hour 5 confirmed NOT idle** — 181 labeled toss windows across 20 min of clips. v4.5's 619 full-day count is reasonable.
+
+| Model | CV F1 | Features | ROIs | Threshold |
+|---|---|---|---|---|
+| LEFT | **0.908** ± 0.022 | 27 | Expanded | 0.50 |
+| RIGHT | **0.920** ± 0.028 | 27 | Expanded | 0.55 |
+| **Avg** | **0.914** | | | |
+
+## Hour 5: The "Over-Count" That Wasn't
+
+**v2 found 13 events in the entire hour. We found 619.** For months this was assumed to be over-counting. But manual labeling across 4 clips (20 min total) reveals:
+
+| Clip | Time | Toss Windows |
+|---|---|---|
+| clip6 | 14:00-14:05 | 22 |
+| clip3 | 14:15-14:20 | 37 |
+| clip11 | 14:25-14:30 | 59 |
+| clip13 | 14:30-14:35 | 63 |
+| **Total** | **20 min** | **181** |
+
+Scaled to 60 min: ~543 toss windows. v4.5 found 619 — only 14% above labeled estimate.
+**v2 missed 97.6% of Hour 5 activity.** The 47× ratio was v2's catastrophic recall failure, not our over-count.
+
+## Expanded Air ROIs
+
+| ROI | Original | Expanded | Change |
+|---|---|---|---|
+| LEFT_AIR | (272,472)-(702,722) | **(272,472)-(831,722)** | +30% width right |
+| RIGHT_AIR | (1233,567)-(1637,808) | **(1092,507)-(1637,808)** | +35% left, +25% up |
+
+- CV F1: 0.914 (unchanged from original ROIs)
+- Production test: 41/41 GT on morning clip
+- Speed: ~100fps (MOG2 processes larger areas)
+- Retrained with all 12 clips
+
+## Approaches Tried and Reverted (v4.5 session)
+
+| Approach | Result | Why |
+|---|---|---|
+| Physics area gate (35% min) | 0/41 GT | Blob area too noisy for hard gate |
+| Physics direction gate | 22/41 GT | Trajectory killed 79 real tosses |
+| Macro-activity gate (signal) | 0 suppressed | Adaptive baseline drifts |
+| Macro-activity gate (air motion) | 0 suppressed | Workers walk through air ROI |
+| Raw texture gate (p75) | 0 suppressed | Tables never fully empty |
+| Raw texture gate (p25) | untestable | Sparse production breaks it |
+| Hard negative subsampling | -0.062 F1 | Flooded class balance |
+| RIGHT feature pruning (27→19) | -0.010 F1 | Every feature contributes |
+| Gap ROIs (between tables) | -0.152 F1 | Killed candidates in v2 tracker |
+| Load-context features | -0.006 F1 | Redundant with existing |
+
+**Lesson:** Hard gates don't work for this problem. Spatial features function as soft signals inside XGBoost (5-8% combined importance). Over-count assumptions were wrong — Hour 5 is peak production.
+
+## Table Processing Detector (NEW)
+
+Training in `train_table_detector.py`: binary XGBoost per table using only raw table ROI features (mean, std, BGR, quadrants). Labels = 1 between Load.cluster and Toss.cluster frames. Non-adaptive — immune to baseline drift. Models saved as `table_processing_detector_{left,right}.pkl`.
+
+## Current Training Data (12 clips)
+
+| Clip | Time | Toss Windows | L | R | Type |
+|---|---|---|---|---|---|
+| clip1 morning | 10:35 | 41 | 5 | 36 | Active |
+| clip2 prelunch | 12:25 | 48 | 22 | 26 | Active |
+| clip3 postlunch | 14:15 | 37 | 6 | 31 | Active |
+| clip4 afternoon | 15:30 | 36 | 27 | 9 | Active |
+| clip5 endofday | 18:45 | 0 | 0 | 0 | Idle |
+| clip6 lunchbreak | 14:00 | 22 | 1 | 21 | Active |
+| clip7 lunch | 13:03 | 0 | 0 | 0 | Idle |
+| clip8 afternoon | 17:10 | 20 | 20 | 0 | LEFT-only |
+| clip9 latemorning | 11:10 | 58 | 47 | 11 | Active |
+| clip11 breakperiod | 14:25 | 59 | 29 | 30 | Active |
+| clip12 endofday | 18:55 | 14 | 0 | 14 | RIGHT-only |
+| clip13 h5 | 14:30 | 63 | 32 | 31 | Active |
+
+**Still pending:** clip10 (09:10 morning start), clip14 (12:30 lunch)
+
+## F1 Journey (Complete)
+
+```
+v4 baseline (RF, 4 clips):               0.872
+v4.2 all-frames matching:                0.902  (+0.030) ★ biggest
+v4.3 XGBoost:                            0.907  (+0.005)
+v4.4 6 spatial features:                 0.914  (+0.007)
+v4.5 expanded ROIs + clip13:             0.914  (stable, data growth)
+```
+
+36 features evaluated, 27 locked. Feature space saturated. Gains from data volume.
+
 # ✅ CH27 v4.5 — Full Day + Final Architecture (2026-05-04)
 
 ## Full-Day Results

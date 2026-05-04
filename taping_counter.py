@@ -82,11 +82,11 @@ RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
 # roi_calibrator_web.py (2026-05-03).
 LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
 RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
-# Air zone above each table — where blanket motion and worker arm movement
-# create detectable frame-to-frame differences. The air-motion thresholds
-# (LEFT=3.0, RIGHT=2.0) are tuned to this table-top geometry.
-LEFT_AIR_ROI_V2  = (272, 472, 702, 722)
-RIGHT_AIR_ROI_V2 = (1233, 567, 1637, 808)
+# EXPANDED AIR ROIS — experiment (2026-05-04)
+# LEFT:  30% wider to the right (430→559px)
+# RIGHT: 35% wider to the left (404→545px) + 25% taller up (241→301px)
+LEFT_AIR_ROI_V2    = (272, 472, 831, 722)      # +30% R width
+RIGHT_AIR_ROI_V2   = (1092, 507, 1637, 808)    # +35% L width, +25% up
 
 TAPE_DISPENSER_LEFT_ROI  = (0, 750, 120, 950)     # legacy / unused
 TAPE_DISPENSER_RIGHT_ROI = (1800, 750, 1920, 950) # legacy / unused
@@ -626,6 +626,11 @@ class _TableTrackerV2:
         self.signal_history = deque(maxlen=int(cfg["context_window_sec"] * fps))
         # Long-window history for break detection (median over last ~20s)
         self.long_signal_history = deque(maxlen=int(20 * fps))
+        # Raw table texture (std-dev) for macro idle gate — 60s window
+        # Empty table = ~10-15, loaded = ~40-60. Non-adaptive — immune to
+        # baseline drift. The 75th percentile stays low during true idle
+        # even if a worker briefly walks past the table.
+        self.raw_texture_history = deque(maxlen=int(60 * fps))
         # Air-motion smoothing buffer
         self.air_smooth_buf = deque(maxlen=cfg["air_motion_smooth"])
         # Per-table air toss threshold (looked up by name)
@@ -690,7 +695,7 @@ class _TableTrackerV2:
 
         # Frame-data fields
         self.last_mean = 0.0
-        self.last_std = 0.0
+        self.last_std  = 0.0   # raw table texture — non-adaptive idle gate
         self.last_signal = 0.0
         self.last_air_motion = 0.0
         self.prev_air_gray = None
@@ -714,6 +719,7 @@ class _TableTrackerV2:
         self.last_signal = signal
         self.signal_history.append(signal)
         self.long_signal_history.append(signal)
+        self.raw_texture_history.append(raw_std)  # non-adaptive — anchor for idle gate
 
         # Adaptive baseline: only update from empty-table frames.
         # When the table is loaded, we FROZEN the baseline buffers so the
@@ -1186,6 +1192,12 @@ class TapingCounter:
         self.frame_data = []   # output log — sampled at frame_data_every for dashboard
         self.v4_frame_buf = deque(maxlen=3000)  # full-rate — 120s holds oldest batched candidate
 
+        # Macro-activity gate: veto XGBoost when factory is idle.
+        # If <15% of last 60s had active table signal, suppress all candidates
+        # on that table. Breaks the Confidence Paradox without touching training.
+        self.v4_macro_gate_thresh = float(config.get("v4_macro_gate_thresh", 0.15))
+        self.v4_macro_gate_window = int(config.get("v4_macro_gate_window", 1500))  # 60s
+
         # Will be set in run()
         self.fps = 25.0
         self.left = None
@@ -1329,6 +1341,20 @@ class TapingCounter:
                       f"(th={self.v4_threshold:.2f}, "
                       f"min_gap={self.v4_min_gap_sec:.1f}s)")
 
+    def _v4_macro_gate(self, table_name):
+        """Veto candidates when table has been empty (flat texture) for 60s.
+
+        Uses raw grayscale std-dev of the table ROI — non-adaptive, immune
+        to baseline drift. Empty table = ~10-15 std, loaded = ~40-60.
+        The 75th percentile over 60s stays low during true idle even if
+        workers briefly walk past and spike the signal.
+        """
+        tracker = self.left if table_name == "left" else self.right
+        if len(tracker.raw_texture_history) < 100:
+            return False  # not enough history
+        p75 = float(np.percentile(list(tracker.raw_texture_history), 25))  # 25th = "75% of time was empty"
+        return p75 < 20.0  # empty table baseline (15) + 5 margin
+
     def _v4_buf_to_dict_list(self):
         """Convert numpy ring buffer to list of dicts for extract_features().
 
@@ -1357,6 +1383,23 @@ class TapingCounter:
                 "right_air_motion": float(buf[i, self._BRAIR]),
             })
         return result
+
+    def _v4_physics_gate(self, payload):
+        """Hard directional filter — tosses must move away from the table.
+
+        Workers always toss TOWARD the heap (+X for LEFT, -X for RIGHT).
+        Negative trajectories on LEFT (= moving toward table) are restocks.
+        Positive trajectories on RIGHT are helper actions.
+        """
+        tbl = payload.get("table", "")
+        traj_x = payload.get("blob_trajectory_x", 0)
+
+        if tbl == "left" and traj_x < -3:
+            return True, "physics_direction"
+        if tbl == "right" and traj_x > 3:
+            return True, "physics_direction"
+
+        return False, None
 
     def _v4_flush_batch(self, current_frame=None):
         """Batch-classify all pending candidates in one predict_proba call.

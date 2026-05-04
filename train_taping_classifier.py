@@ -43,6 +43,7 @@ CLIPS_FOR_TRAINING = [
     "gt_clip9_latemorning",        # late morning LEFT-heavy, 58 toss windows
     "gt_clip11_breakperiod",       # break period with noted FPs (heap move, counting)
     "gt_clip12_endofday",          # end-of-day RIGHT-only (374 tosses R, 0 L)
+    "gt_clip13_h5idle",            # Hour 5 active — 63 toss windows (L=32, R=31)
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
@@ -772,6 +773,7 @@ def _make_clf(n_pos, n_neg, classifier="xgb"):
             n_estimators=400, max_depth=8, learning_rate=0.03,
             colsample_bytree=0.6, subsample=0.8,
             min_child_weight=5, gamma=0.1,
+            reg_lambda=1.0, reg_alpha=0.1,  # mild L2 + tiny L1
             scale_pos_weight=n_neg / max(1, n_pos),
             objective="binary:logistic", eval_metric="logloss",
             random_state=42, n_jobs=-1, verbosity=0,
