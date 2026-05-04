@@ -2,7 +2,56 @@
 
 ---
 
-# ✅ CH27 v4.5 — Spatial Features + Hyperparameter Tuning (2026-05-04)
+# ✅ CH27 v4.5 — Full Day + Final Architecture (2026-05-04)
+
+## Full-Day Results
+
+**4,383 cycles** (L=2,198, R=2,185) over 9.0 hours. Balance ratio: 0.994 (near-perfect). Median duration: 6.9s.
+
+| Hour | v4.5 | v2 | v4.5/v2 | Note |
+|---|---|---|---|---|
+| 0 (09:00) | 626 | 344 | 1.82× | Morning active |
+| 1 (10:00) | 659 | 402 | 1.64× | Peak production |
+| 2 (11:00) | 576 | 375 | 1.54× | Late morning |
+| 3 (12:00) | 373 | 76 | 4.91× | Lunch — over-counted |
+| 4 (13:00) | 152 | 54 | 2.81× | Post-lunch return |
+| 5 (14:00) | 619 | 13 | 47.62× | Break — over-counted |
+| 6 (15:00) | 622 | 247 | 2.52× | Afternoon active |
+| 7 (17:00) | 447 | 216 | 2.07× | Late afternoon |
+| 8 (18:00) | 309 | 160 | 1.93× | End of day |
+
+**Processing:** 5,622s (~94 min) at 144 fps (5.8× realtime). Suppressed: 21,595 candidates.
+**Cycle durations:** mean=11.8s, median=6.9s. Only 1 cycle <3s — cooldown working perfectly.
+
+## v4.5 Model
+
+| Model | CV F1 | Features | Threshold | Samples |
+|---|---|---|---|---|
+| LEFT | **0.909** ± 0.024 | 27 | 0.50 | 1,259 |
+| RIGHT | **0.928** ± 0.018 | 27 | 0.55 | 1,360 |
+| **Avg** | **0.919** | | | |
+
+**Hyperparameters:** n_estimators=400, max_depth=8, learning_rate=0.03, colsample_bytree=0.6, subsample=0.8, min_child_weight=5, gamma=0.1
+**Per-table pruning:** Tested (RIGHT 27→19, no color+asymmetry). Reverted — every feature contributes non-zero importance even on RIGHT.
+
+## Remaining Issues
+
+1. **Hour 5 over-count (47.62×):** The break/idle hour remains the biggest FP source. Only 3 idle clips in training (5, 7, 12 with 0 LEFT tosses). More break data needed.
+2. **Hour 3 over-count (4.91×):** Lunch period. clip2 covers 12:25-12:30 but the rest of the hour is uncovered.
+3. **LEFT recall gap:** LEFT=0.909 vs RIGHT=0.928. Air baseline noise (3.6 vs 0.8) and fewer idle training clips.
+
+## F1 Journey (Complete)
+
+```
+v4 baseline (RF, 4 clips):               0.872
+v4.2 all-frames matching:                0.902  (+0.030) ★ biggest
+v4.3 XGBoost:                            0.907  (+0.005)
+v4.4 6 spatial features + clip11:        0.914  (+0.007)
+v4.5 deep hyperparams + morph + clip12:  0.919  (+0.005)
+Full-day: 4,383 cycles                   0.994 balance
+```
+
+**36 features evaluated, 27 locked, 0.031 to 0.95.** Feature space exhausted. Gains now from data volume + diversity.
 
 ## Headline
 

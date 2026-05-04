@@ -769,8 +769,9 @@ def _make_clf(n_pos, n_neg, classifier="xgb"):
         )
     elif classifier == "xgb":
         return xgb.XGBClassifier(
-            n_estimators=300, max_depth=6, learning_rate=0.05,
-            colsample_bytree=0.7, min_child_weight=3,
+            n_estimators=400, max_depth=8, learning_rate=0.03,
+            colsample_bytree=0.6, subsample=0.8,
+            min_child_weight=5, gamma=0.1,
             scale_pos_weight=n_neg / max(1, n_pos),
             objective="binary:logistic", eval_metric="logloss",
             random_state=42, n_jobs=-1, verbosity=0,
@@ -791,6 +792,18 @@ def _make_clf(n_pos, n_neg, classifier="xgb"):
             estimators=[("rf", rf), ("xgb", xgb_clf)],
             voting="soft", n_jobs=-1,
         )
+
+
+# Per-table feature sets — RIGHT doesn't benefit from color or asymmetry
+FEATURE_NAMES_RIGHT = [
+    "peak_height","peak_above_baseline","duration_above_thresh_sec",
+    "rise_time_sec","decay_time_sec","skewness","auc_above_thresh",
+    "pre_peak_table_max","post_peak_table_min","table_drop","table_signal_at_peak",
+    "simultaneous_air_other_table","air_diff_to_other",
+    "blob_max_area","blob_max_aspect","blob_trajectory_x",
+    "blob_y_centroid","table_solidity",
+    "table_transition_var",
+]  # 19 features — drops color (5) + asymmetry (3) which add noise on RIGHT
 
 
 def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
@@ -830,6 +843,10 @@ def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
             continue
         X_tbl = np.array(all_X[tbl], dtype=float)
         y_tbl = np.array(all_y[tbl], dtype=int)
+
+        # Both tables use the full 27 features
+        tbl_feat_names = FEATURE_NAMES
+
         n_pos = int(y_tbl.sum())
         n_neg = len(y_tbl) - n_pos
 
@@ -919,7 +936,7 @@ def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
         # Feature importances (not available for VotingClassifier)
         if classifier != "stack" and hasattr(clf, "feature_importances_"):
             print(f"\n  Feature importances:")
-            imps = sorted(zip(FEATURE_NAMES, clf.feature_importances_), key=lambda x: -x[1])
+            imps = sorted(zip(tbl_feat_names, clf.feature_importances_), key=lambda x: -x[1])
             for name, imp in imps:
                 bar = "█" * int(imp * 50)
                 print(f"    {name:32s}  {imp:.3f}  {bar}")
@@ -934,8 +951,8 @@ def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
         # Save per-table metadata
         meta = {
             "table": tbl,
-            "feature_names": FEATURE_NAMES,
-            "n_features": len(FEATURE_NAMES),
+            "feature_names": tbl_feat_names,
+            "n_features": len(tbl_feat_names),
             "trained_at": datetime.now().isoformat(),
             "training_clips": CLIPS_FOR_TRAINING,
             "n_samples": int(len(y_tbl)),
@@ -946,7 +963,7 @@ def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
             "cv_precision_mean": float(cv_p.mean()),
             "cv_recall_mean": float(cv_r.mean()),
             "feature_importances": (
-                dict(zip(FEATURE_NAMES, [float(x) for x in clf.feature_importances_]))
+                dict(zip(tbl_feat_names, [float(x) for x in clf.feature_importances_]))
                 if hasattr(clf, "feature_importances_") else {}),
             "model": "VotingClassifier(RF+XGBoost, soft)" if classifier == "stack"
                      else ("XGBClassifier(n_estimators=300, max_depth=6)" if classifier == "xgb"

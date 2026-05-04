@@ -1276,11 +1276,21 @@ class TapingCounter:
                     else:
                         self.v4_threshold_right = self.v4_threshold
 
-            # Feature names from the LEFT metadata (both use same schema)
-            meta_left = base / "classifier_metadata_left.json"
-            if meta_left.exists():
-                meta = json.loads(meta_left.read_text())
-                self.v4_feature_names = meta["feature_names"]
+            # Per-table feature names (RIGHT may have fewer features)
+            for tbl, fn in [("left", "classifier_metadata_left.json"),
+                            ("right", "classifier_metadata_right.json")]:
+                meta_path = base / fn
+                if meta_path.exists():
+                    meta = json.loads(meta_path.read_text())
+                    if tbl == "left":
+                        self.v4_feature_names_left = meta["feature_names"]
+                    else:
+                        self.v4_feature_names_right = meta["feature_names"]
+                else:
+                    if tbl == "left":
+                        self.v4_feature_names_left = FEATURE_NAMES
+                    else:
+                        self.v4_feature_names_right = FEATURE_NAMES
             if self.debug:
                 print(f"[v4] per-table classifiers loaded "
                       f"(th_left={self.v4_threshold_left:.2f}, "
@@ -1364,30 +1374,32 @@ class TapingCounter:
         if not batch:
             return
 
-        feature_order = self.v4_feature_names or FEATURE_NAMES
-        buf_list = list(self.v4_frame_buf)  # same dict format as training
-        n_feat = len(feature_order)
+        buf_list = list(self.v4_frame_buf)
 
-        # Extract features and build X matrix
-        X_rows = np.zeros((len(batch), n_feat), dtype=float)
+        # Build X matrix — use per-table feature order (RIGHT has fewer features)
+        feature_order_L = self.v4_feature_names_left or FEATURE_NAMES
+        feature_order_R = self.v4_feature_names_right or FEATURE_NAMES
+        n_feat_L = len(feature_order_L)
+        n_feat_R = len(feature_order_R)
+        X_rows = np.zeros((len(batch), max(n_feat_L, n_feat_R)), dtype=float)
         for i, (payload, _) in enumerate(batch):
             feats = extract_features(payload, buf_list)
-            for j, name in enumerate(feature_order):
+            tbl = payload.get("table", "")
+            order = feature_order_L if tbl == "left" else feature_order_R
+            for j, name in enumerate(order):
                 X_rows[i, j] = feats.get(name, 0.0)
 
-        # Batch predict
-        tbls = [payload.get("table", "") for payload, _ in batch]
-        # Route to per-table or single classifier
+        # Batch predict — route to per-table classifier with per-table feature shapes
         if isinstance(self.v4_classifier, dict):
-            # Split by table, batch-predict each
             probs = np.zeros(len(batch), dtype=float)
             for tbl in ["left", "right"]:
-                mask = [t == tbl for t in tbls]
+                mask = [payload.get("table", "") == tbl for payload, _ in batch]
                 if any(mask):
                     indices = [i for i, m in enumerate(mask) if m]
                     clf = self.v4_classifier[tbl]
+                    order = feature_order_L if tbl == "left" else feature_order_R
                     probs[indices] = clf.predict_proba(
-                        X_rows[indices])[:, 1]
+                        X_rows[indices][:, :len(order)])[:, 1]
         else:
             probs = self.v4_classifier.predict_proba(X_rows)[:, 1]
 
