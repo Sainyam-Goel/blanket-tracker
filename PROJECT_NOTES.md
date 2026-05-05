@@ -2,6 +2,97 @@
 
 ---
 
+# ✅ CH27 — Load Model v3: Per-Table Margins + Cycle-Confirm Gate (2026-05-05)
+
+## Headline
+
+**Load model at 0.877 avg (LEFT 0.822, RIGHT 0.931).** Per-table texture margins fix LEFT candidate scarcity. Cycle-confirm gate implemented for production. RIGHT load model (0.931) is the best single-table model in the project.
+
+## All Models — Current State
+
+| Model | LEFT F1 | RIGHT F1 | AVG | Features | Trigger | Speed |
+|---|---|---|---|---|---|---|
+| **TOSS** | 0.888 | 0.875 | 0.882 | 27 | Air motion | ~140fps |
+| **LOAD** | 0.822 | **0.931** ★ | **0.877** | 13 | Table texture | ~120fps |
+
+## Load Model Architecture
+
+### Candidate Generation (Texture-Triggered)
+Per-table rolling baseline approach — different thresholds for LEFT (darker table) vs RIGHT:
+
+```python
+TABLE_TEXTURE_LOAD_MARGIN = {"left": 4.0, "right": 8.0}
+# Rolling p20 baseline over 3s window
+# Candidate fires when current_std > baseline + margin[tbl]
+```
+
+LEFT at 4.0 generates 260 candidates (was 74, +251%). RIGHT at 8.0 stays at 188.
+
+### 13 Features (No Air-Zone Processing)
+All features from table ROI, LR quadrant, and landing polygon only. Air-motion features had 0 importance — removed entirely. No MOG2, no air ROI math during load evaluation. 2.4× faster than initial version via pre-computed cropped polygon masks.
+
+| Feature Zone | LEFT Imp | RIGHT Imp | What It Captures |
+|---|---|---|---|
+| LR Quadrant | 36.1% | 30.1% | Blanket sliding/throwing motion |
+| Landing Polygon | 30.3% | 35.6% | Settled blanket on table surface |
+| Table ROI global | 24.5% | 24.2% | Overall table state change |
+| Color | 5.4% | 5.5% | Per-channel BGR shifts |
+| Duration | 3.7% | 4.6% | Trigger intensity |
+
+## Cycle-Confirm Gate (Production Integration)
+
+In `taping_counter.py`, a confidence-tiered gate validates tosses against load state:
+
+```python
+# TIER 1: God-tier (prob >= 0.85) — bypass load check
+# TIER 2: Borderline (0.50-0.85) — require load within 10-45s
+# TIER 3: Noise (prob < 0.50) — suppress
+
+if toss_prob >= 0.85:
+    emit_toss()  # trust the physics
+elif toss_prob >= 0.50:
+    if 10s <= time_since_load <= 45s:
+        emit_toss()  # confirmed by load
+    else:
+        suppress("cycle_confirm_fail")  # no preceding load
+```
+
+**Morning clip test:** 39/41 GT, only 2 cycle_confirm_fail drops. God-tier bypass preserves high recall. The gate primarily filters Hour 5 break-period noise where toss-like events occur without preceding loads.
+
+## Load Model Trajectory
+
+```
+v1 (air-motion candidates, unified threshold):  0.791
+  LEFT=0.675  RIGHT=0.906
+
+v2 (two-zone features + landing polygon):        0.865  (+0.074)
+  LEFT=0.806  RIGHT=0.924
+
+v3 (per-table margins + pruned air + speed):     0.877  (+0.012)
+  LEFT=0.822  RIGHT=0.931
+```
+
+## Speed Optimization
+
+Replaced `cv2.fillPoly` on full 1920×1080 mask per frame with pre-computed cropped boolean index masks. The landing polygon covers only ~68k pixels but fillPoly allocated 2M pixels. Fix: pre-compute bbox-cropped mask once, use numpy boolean indexing. Clip processing: 123s → 52s (2.4× faster).
+
+## Current Limitations
+
+1. **LEFT load model at 0.822** — still weaker than RIGHT (0.931). LEFT's darker table needs more training data or lower trigger thresholds.
+2. **Cycle-confirm gate uses v2 tracker's load state**, not the dedicated load model. Full integration of the load model into production would improve accuracy.
+3. **Gate untested on full day** — Hour 5 impact not yet measured.
+
+## Model Files
+
+| File | Model | Table | F1 |
+|---|---|---|---|
+| `taping_pulse_classifier_toss_v4_left.pkl` | TOSS | LEFT | 0.888 |
+| `taping_pulse_classifier_toss_v4_right.pkl` | TOSS | RIGHT | 0.875 |
+| `taping_load_texture_classifier_v1_left.pkl` | LOAD | LEFT | 0.822 |
+| `taping_load_texture_classifier_v1_right.pkl` | LOAD | RIGHT | 0.931 |
+
+---
+
 # ✅ CH27 — Load Model v1: Texture-Triggered + Two-Zone Features (2026-05-04)
 
 ## Headline

@@ -28,14 +28,13 @@ sys.path.insert(0, str(HERE))
 
 from train_taping_classifier import CLIPS_FOR_TRAINING, cluster_labels, load_clip_gt
 from taping_counter import LEFT_TABLE_ROI_V2, RIGHT_TABLE_ROI_V2
-from taping_counter import LEFT_AIR_ROI_V2, RIGHT_AIR_ROI_V2
 
 # ═══════════════════════════════════════════════════════════════
 # Config
 # ═══════════════════════════════════════════════════════════════
 
 TABLE_TEXTURE_BASELINE_FRAMES = 75  # 3s rolling baseline for "empty" texture
-TABLE_TEXTURE_LOAD_MARGIN = 8.0     # texture must exceed baseline + margin to trigger
+TABLE_TEXTURE_LOAD_MARGIN = {"left": 4.0, "right": 8.0}  # per-table — LEFT darker table needs lower threshold
 MIN_LOAD_GAP_SEC = 1.5              # cooldown between load candidates
 LOAD_WINDOW_PRE_SEC = 1.0          # look back 1s before trigger
 LOAD_WINDOW_POST_SEC = 3.0         # look ahead 3s after trigger
@@ -54,9 +53,6 @@ FEATURE_NAMES_LOAD = [
     "color_dominant_channel", # which channel changed most (0=gray,1=R,2=G,3=B)
     # Settling — blanket laid flat = solid rectangle
     "table_solidity_after",   # contour solidity at +3s
-    # Air check — restocks come from the air, normal loads from table side
-    "air_motion_pre_trigger", # sum of air diff in 1s before trigger
-    "air_motion_ratio",       # air_after / max(1, air_before)
     # Duration context
     "trigger_height",         # how high was the texture spike?
     "trigger_duration",       # how long did the spike last?
@@ -92,23 +88,32 @@ def generate_load_candidates(video_path, fps=25.0):
         "left":  LEFT_TABLE_ROI_V2,
         "right": RIGHT_TABLE_ROI_V2,
     }
-    air_rois = {
-        "left":  LEFT_AIR_ROI_V2,
-        "right": RIGHT_AIR_ROI_V2,
-    }
 
     # Rolling buffer of raw table texture (std-dev) per table
     texture_history = {"left": deque(maxlen=75), "right": deque(maxlen=75)}
     texture_times = {"left": deque(maxlen=75), "right": deque(maxlen=75)}
-    air_history = {"left": deque(maxlen=25), "right": deque(maxlen=25)}
 
-    # Landing zone polygons — user-calibrated blanket settling surface
-    land_polys = {
-        "left":  np.array([[LEFT_LANDING_ZONE[i], LEFT_LANDING_ZONE[i+1]]
-                            for i in range(0, len(LEFT_LANDING_ZONE), 2)], dtype=np.int32),
-        "right": np.array([[RIGHT_LANDING_ZONE[i], RIGHT_LANDING_ZONE[i+1]]
-                            for i in range(0, len(RIGHT_LANDING_ZONE), 2)], dtype=np.int32),
-    }
+    # Pre-compute polygon masks — cropped to bounding box for speed
+    # fillPoly on 1920×1080 every frame is the bottleneck (30× wasted pixels)
+    land_masks = {}
+    for tbl in ["left", "right"]:
+        pts = np.array([[LEFT_LANDING_ZONE[i], LEFT_LANDING_ZONE[i+1]]
+                        for i in range(0, len(LEFT_LANDING_ZONE), 2)], dtype=np.int32) \
+              if tbl == "left" else \
+              np.array([[RIGHT_LANDING_ZONE[i], RIGHT_LANDING_ZONE[i+1]]
+                        for i in range(0, len(RIGHT_LANDING_ZONE), 2)], dtype=np.int32)
+        xs, ys = pts[:, 0], pts[:, 1]
+        x1, y1 = int(xs.min()), int(ys.min())
+        x2, y2 = int(xs.max()), int(ys.max())
+        h, w = y2 - y1, x2 - x1
+        # Create mask only for bounding box region
+        roi_mask = np.zeros((h, w), dtype=np.uint8)
+        shifted = pts - np.array([x1, y1])
+        cv2.fillPoly(roi_mask, [shifted], 255)
+        land_masks[tbl] = {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+            "mask": roi_mask == 255  # boolean index for numpy
+        }
 
     # Full frame data for feature extraction window
     frame_data = []
@@ -116,8 +121,6 @@ def generate_load_candidates(video_path, fps=25.0):
 
     candidates = []
     last_trigger = {"left": -1e9, "right": -1e9}
-
-    prev_gray = {"left": None, "right": None}
 
     while True:
         ret, frame = cap.read()
@@ -163,31 +166,20 @@ def generate_load_candidates(video_path, fps=25.0):
             frame_entry[f"{tbl}_lr_G"] = float(np.mean(q_bgr[:,:,1]))
             frame_entry[f"{tbl}_lr_R"] = float(np.mean(q_bgr[:,:,2]))
 
-            # Landing polygon — blanket settling surface (user-calibrated)
-            land_mask = np.zeros(gray.shape[:2], dtype=np.uint8)
-            cv2.fillPoly(land_mask, [land_polys[tbl]], 255)
-            lp = gray[land_mask == 255]
-            if len(lp) > 0:
-                frame_entry[f"{tbl}_land_std"] = float(np.std(lp))
-                frame_entry[f"{tbl}_land_mean"] = float(np.mean(lp))
-                lbgr = frame[land_mask == 255]
+            # Landing polygon - use pre-computed cropped mask (fast)
+            lm = land_masks[tbl]
+            land_crop = gray[lm["y1"]:lm["y2"], lm["x1"]:lm["x2"]]
+            land_px = land_crop[lm["mask"]]
+            if len(land_px) > 0:
+                frame_entry[f"{tbl}_land_std"] = float(np.std(land_px))
+                frame_entry[f"{tbl}_land_mean"] = float(np.mean(land_px))
+                lbgr = frame[lm["y1"]:lm["y2"], lm["x1"]:lm["x2"]][lm["mask"]]
                 frame_entry[f"{tbl}_land_B"] = float(np.mean(lbgr[:,0]))
                 frame_entry[f"{tbl}_land_G"] = float(np.mean(lbgr[:,1]))
                 frame_entry[f"{tbl}_land_R"] = float(np.mean(lbgr[:,2]))
             else:
                 for fld in ["land_std","land_mean","land_B","land_G","land_R"]:
                     frame_entry[f"{tbl}_{fld}"] = 0.0
-
-            # Air motion for pre-trigger check
-            ax1, ay1, ax2, ay2 = air_rois[tbl]
-            air_roi = gray[ay1:ay2, ax1:ax2].astype(np.float64)
-            if prev_gray[tbl] is not None:
-                prev_air = prev_gray[tbl].astype(np.float64)
-                air_diff = float(np.mean(np.abs(air_roi - prev_air)))
-            else:
-                air_diff = 0.0
-            prev_gray[tbl] = air_roi
-            air_history[tbl].append(air_diff)
 
             # Track texture for derivative
             texture_history[tbl].append(raw_std)
@@ -201,7 +193,7 @@ def generate_load_candidates(video_path, fps=25.0):
                 baseline = float(np.percentile(recent, 20))
                 current = recent[-1]
 
-                if (current > baseline + TABLE_TEXTURE_LOAD_MARGIN and
+                if (current > baseline + TABLE_TEXTURE_LOAD_MARGIN[tbl] and
                     t_sec - last_trigger[tbl] > MIN_LOAD_GAP_SEC):
                     last_trigger[tbl] = t_sec
                     candidates.append({
@@ -286,13 +278,7 @@ def extract_load_features(candidate, frame_data, fps=25.0):
     # We can't compute solidity from frame_data alone — use 0 as placeholder
     table_solidity_after = 0.0
 
-    # 5. Air motion pre-trigger — was there air activity before the table change?
-    air_pre_start = max(0, peak_f - int(1.0 * fps))
-    air_pre_data = [r for r in window if air_pre_start <= r["frame"] <= peak_f]
-    air_motion_pre_trigger = 0.0  # We don't have air motion in frame_data for this
-    air_motion_ratio = 0.0
-
-    # 6. Trigger characteristics
+    # Trigger characteristics
     trigger_height = float(candidate.get("trigger_strength", 0))
     trigger_duration = float(len(after) - len(before)) / fps
 
@@ -331,8 +317,6 @@ def extract_load_features(candidate, frame_data, fps=25.0):
         "color_bgr_shift": round(color_bgr_shift, 2),
         "color_dominant_channel": color_dominant_channel,
         "table_solidity_after": table_solidity_after,
-        "air_motion_pre_trigger": air_motion_pre_trigger,
-        "air_motion_ratio": air_motion_ratio,
         "trigger_height": round(trigger_height, 2),
         "trigger_duration": round(trigger_duration, 2),
         "lr_quad_std_step": round(lr_quad_std_step, 2),

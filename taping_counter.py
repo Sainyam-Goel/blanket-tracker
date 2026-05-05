@@ -1476,6 +1476,19 @@ class TapingCounter:
                 })
                 continue
 
+            # Cycle-confirm gate — borderline tosses require recent load
+            gotier = prob >= 0.85
+            borderline = 0.50 <= prob < 0.85
+            if borderline:
+                load_t = self.left.last_load_start_t if tbl == "left" else self.right.last_load_start_t
+                load_window = 10.0 <= (payload["time_sec"] - load_t) <= 45.0
+                if not load_window:
+                    self.suppressed.append({
+                        **payload,
+                        "reason": "cycle_confirm_fail",
+                    })
+                    continue
+
             # Accepted
             payload["cycle_duration_sec"] = round(
                 max(0, payload["time_sec"] - max(0, prev_t)), 2)
