@@ -883,8 +883,9 @@ class _TableTrackerV2:
         # Learning rate = -1 (auto) during normal frames, 0 during pulses
         # so the flying blanket doesn't become part of the background.
         # Skip MOG2 entirely when air motion is near zero (saves ~18% CPU).
-        air_live = self.in_air_pulse or raw_motion > 2.5
-        if air_live or not self.air_mog2_warmed:
+        # Only active in fast_mode; accurate mode always runs MOG2.
+        air_live = self.in_air_pulse or (self._fast_mode and raw_motion > 2.5)
+        if air_live or not self.air_mog2_warmed or not self._fast_mode:
             air_uint8 = air.astype(np.uint8) if air.dtype != np.uint8 else air
             learn_rate = 0.0 if self.in_air_pulse else -1.0
             air_fg_mask = self.air_mog2.apply(air_uint8, learningRate=learn_rate)
@@ -1382,7 +1383,10 @@ class TapingCounter:
         self.right_load_det = None
         self.v4_last_load_t = {"left": -1.0, "right": -1.0}
         self._load_frame_ctr = 0
-        self._load_frame_skip = 4  # process load detector every Nth frame
+        self._load_frame_skip = 1  # process load detector every Nth frame
+        self._fast_mode = bool(config.get("fast_mode", False))
+        if self._fast_mode:
+            self._load_frame_skip = 4  # 4x fewer load detector frames
         if self.version == "v4":
             self._load_v4_classifier(config)
             self._init_load_detectors(config)
