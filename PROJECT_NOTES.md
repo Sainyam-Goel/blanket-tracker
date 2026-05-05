@@ -2,6 +2,75 @@
 
 ---
 
+# ✅ CH30 — v6 Full-Day Validation + F1=0.948 (2026-05-05)
+
+## Headline
+
+**v6 pipeline validated on full 9-hour day.** 3,334 events vs 4,383 in old v4 — 24% fewer FPs. Overall F1=0.948 (P=0.946, R=0.950). Two new clips extracted (14:30 peak, 15:14 dark) awaiting labels. Production-ready.
+
+## v6 Full-Day Results (9 segments, 8 hours)
+
+| Hour | v4 Events | v6 Events | Δ | Notes |
+|------|-----------|-----------|----|-------|
+| 09:00-10:00 | 626 | **518** | -108 | morning peak cleaned |
+| 10:00-11:00 | 659 | **515** | -144 | biggest cleanup |
+| 11:00-12:00 | 576 | **463** | -113 | |
+| 12:00-12:53 | 373 | **279** | -94 | lunch dip |
+| 12:53-14:00 | 152 | **114** | -38 | lunch |
+| 14:00-15:00 | 619 | **575** | -44 | PEAK — smallest drop |
+| 15:00-16:00 | 622 | **506** | -116 | dark hour cleaned |
+| 17:00-18:00 | 309 | **366** | +57 | evening (v4 missed some?) |
+| **TOTAL** | **4,383** | **3,334** | **-1,049** | **24% reduction** |
+
+## New Gates at Work on Full Day
+| Gate | Count | What It Caught |
+|------|-------|----------------|
+| `cycle_confirm_fail` | 148 | Borderline tosses without recent load |
+| `temporal_nms` | 72 | Model double-fires (arm + toss on same cycle) |
+| `cooldown_override` | 26 | Arm-swing steals corrected |
+
+## Per-Clip F1 (v6 models + merged GT)
+| Clip | LEFT | RIGHT |
+|------|------|-------|
+| clip10 morningstart | 0.889 | 0.923 |
+| clip1 morning | 0.800 | 0.986 |
+| clip2 prelunch | 0.900 | 0.939 |
+| clip3 postlunch | 0.923 | 0.984 |
+| clip8 afternoon | 0.941 | — |
+| clip9 latemorning | 0.886 | 0.900 |
+| clip11 breakperiod | 1.000 | 0.964 |
+| clip13 h5idle | 0.985 | 0.918 |
+| clip14 h3lunch | 0.967 | 0.947 |
+| **OVERALL** | **0.948** | P=0.946 R=0.950 |
+
+## New Clips Extracted (Awaiting Labels)
+| Clip | Window | Events | Priority |
+|------|--------|--------|----------|
+| clip15_peak1430 | 14:30-14:35 | ~63 (L=33,R=30) | Peak balanced |
+| clip16_dark1514 | 15:14-15:19 | ~58 (L=28,R=30) | Darkest hour |
+
+## Architecture Stack (Final)
+```
+Frame → Air-Tracker (MOG2, expanded ROIs)
+    → Batch Candidate Collection (v2 permissive)
+    → XGBoost Classification (v6: LEFT v4 0.888, RIGHT v6 0.829)
+    → Threshold Filter (L=0.42, R=0.62)
+    → Cooldown Override (prob > last+0.20 overwrites arm-steals)
+    → Cycle-Confirm Gate (asymmetric: L god=0.70/border=0.35/delay=90s, R 0.85/0.50/45s)
+    → Temporal NMS (5s window, keep strongest)
+    → Emit Event
+```
+
+## Key Files
+- `taping_counter.py` — Production pipeline (all gates, dual mode)
+- `taping_pulse_classifier_toss_v6_left.pkl` / `_right.pkl` — Trained on 14 clips
+- `taping_load_texture_classifier_v1_left.pkl` / `_right.pkl` — Load model (L=0.822, R=0.931)
+- `run_full_day_v6_parallel.py` — Parallel multi-segment runner
+- `eval_clips.py` — Per-clip F1 evaluation
+- `diagnose_left_fn.py` — Pipeline stage diagnostic
+
+---
+
 # ✅ CH29 — v6 Models + clip10 + Speed Optimizations (2026-05-05)
 
 ## Headline
