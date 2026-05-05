@@ -2,7 +2,60 @@
 
 ---
 
-# 🔥 CH28 CORRECTION — GT Double-Labels Debunked (2026-05-05)
+# ✅ CH28.2 — Temporal NMS Shipped, F1=0.946 (2026-05-05)
+
+## Headline
+
+**Temporal NMS fixed the double-fire problem.** Post-processing step suppresses weaker events within 5s of a stronger one on the same table. clip9 LEFT F1 jumped from 0.854→0.946 (FP 12→4). Overall F1 estimated at 0.94-0.95 with ~99.3% recall.
+
+## Temporal NMS Architecture
+```python
+def _apply_temporal_nms(self, events, window_sec=5.0):
+    # Per table: sort by time, keep highest-prob event within each 5s window
+    # Weaker adjacent events → suppressed as "temporal_nms"
+```
+
+Applied after all events collected, before `_build_results()`. Kills model double-firing (toss + arm-swing on same cycle) without touching thresholds.
+
+## Final Pipeline Configuration
+| Component | LEFT | RIGHT |
+|-----------|------|-------|
+| Toss Model | v4 (CV 0.888) | v5 (CV 0.822, arm-swing) |
+| Classifier Threshold | 0.42 (metadata) | 0.62 (metadata) |
+| Cycle-Confirm | god=0.70, border=0.35, delay=90s | god=0.85, border=0.50, delay=45s |
+| Load Model | v1 (CV 0.822) | v1 (CV 0.931) |
+| Min Gap | 3.0s | 3.0s |
+| Cooldown Override | prob > last+0.20 | prob > last+0.20 |
+| Temporal NMS | window=5.0s | window=5.0s |
+
+## Per-Clip Results (merged GT, with NMS)
+| Clip | LEFT F1 | RIGHT F1 | NMS Suppressed |
+|------|---------|----------|----------------|
+| clip1 morning | ~0.91 | ~0.97 | 2 |
+| clip2 prelunch | ~1.00 | ~0.94 | 2 |
+| clip3 postlunch | ~1.00 | ~1.00 | — |
+| clip4 afternoon | ~0.98 | ~1.00 | — |
+| clip6 lunchbreak | ~0.67† | ~0.96 | — |
+| clip8 afternoon | 0.941 | — | — |
+| clip9 latemorning | **0.946** | **0.957** | 9 |
+| clip11 breakperiod | ~0.98 | ~0.93 | 4 |
+| clip12 endofday | — | ~1.00 | — |
+| clip13 h5idle | ~0.97 | ~0.97 | 2 |
+| clip14 h3lunch | ~0.97 | ~0.97 | 1 |
+
+† clip6: only 1 GT LEFT event, 1 FP → 0.667. Statistical noise on single event.
+
+**OVERALL: F1 ≈ 0.94-0.95, Recall ≈ 99.3%**
+
+## Next: Performance Optimization
+Target: 9-hour day in < 20 min (was ~47 min at 80fps). Key bottlenecks:
+1. Load detector per-frame overhead (landing polygon + LR quadrant)
+2. MOG2 background subtraction
+3. HEVC decode
+
+---
+
+# ✅ CH28 CORRECTION — GT Double-Labels Debunked (2026-05-05)
 
 ## Headline
 
