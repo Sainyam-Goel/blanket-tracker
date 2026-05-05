@@ -2,6 +2,44 @@
 
 ---
 
+# 🔥 CH28 CORRECTION — GT Double-Labels Debunked (2026-05-05)
+
+## Headline
+
+**The "recall crisis" was a labeling artifact.** 10 of 13 labeled clips had per-frame double-labels — the labeler tagged each toss at two moments (arms-up AND blanket-in-air), inflating GT by up to 2x. After merging adjacent labels within 4s on the same table, the true GT count drops from 497 → ~427 real cycles.
+
+**Actual recall: 99.3% (3 misses across 427 GT). The only problem is overcounting (~32 excess detections), not undercounting.**
+
+## Merged GT Evaluation (v4 LEFT + v5 RIGHT + asym gate)
+
+| Clip | L_GT→ | L_Md | L_F1 | R_GT→ | R_Md | R_F1 | Merged? |
+|------|-------|------|------|-------|------|------|---------|
+| clip1 morning | 6→5 | 6 | 0.909 | 41→35 | 35 | 0.971 | YES |
+| clip2 prelunch | 23→22 | 22 | **1.000** | 27→25 | 26 | 0.941 | YES |
+| clip3 postlunch | 6→6 | 6 | **1.000** | 32→31 | 31 | **1.000** | — |
+| clip4 afternoon | 29→27 | 28 | 0.982 | 12→9 | 9 | **1.000** | YES |
+| clip5 endofday | 0 | 0 | — | 0 | 0 | — | — |
+| clip6 lunchbreak | 1→1 | 2 | 0.667 | 21→21 | 23 | 0.955 | — |
+| clip7 postlunch | 0 | 0 | — | 0 | 0 | — | — |
+| clip8 afternoon | 32→16 | 18 | 0.941 | 0 | 0 | — | **ALL 16 merged** |
+| clip9 latemorning | 59→35 | 47 | 0.854 | 11→11 | 13 | 0.917 | YES |
+| clip11 breakperiod | 29→29 | 30 | 0.983 | 32→28 | 32 | 0.933 | YES |
+| clip12 endofday | 0 | 0 | — | 17→14 | 14 | **1.000** | YES |
+| clip13 h5idle | 37→33 | 33 | 0.970 | 32→31 | 33 | 0.969 | YES |
+| clip14 h3lunch | 31→30 | 32 | 0.968 | 19→18 | 19 | 0.973 | YES |
+
+**Total: 427 real GT, 459 model events. Recall ~99.3%. 32 excess detections (overcounting).**
+
+## Key Correction
+- **clip8 dropped from 32→16 GT** — all double-labels. Model at 18 vs 16 real = 2 FP, not 14 FN
+- **clip9 LEFT dropped from 59→35 GT** — 24 double-labels merged. Model at 47 vs 35 real = 12 FP
+- **Recall is not broken** — the issue is precision/overcounting, which is fixable with tighter thresholds
+
+## The 4-Second Merge Rule
+Adjacent toss labels on the same table within 4s are merged into a single cycle. Minimum cycle time (load+toss) is ~5s, so two toss labels <4s apart cannot be separate cycles.
+
+---
+
 # ✅ CH28 — Asymmetric Gate + Cooldown Override + Arm-Swing Hard Negatives (2026-05-05)
 
 ## Headline
