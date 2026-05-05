@@ -2,6 +2,60 @@
 
 ---
 
+# ✅ CH29 — v6 Models + clip10 + Speed Optimizations (2026-05-05)
+
+## Headline
+
+**clip10 labeled and added to training.** v6 models improve clip10 LEFT from 0.824→0.889. Speed optimizations yield 1.67x speedup (85→142fps) with dual-mode toggle. Overall F1 estimated 0.94-0.95 with 99.3% recall.
+
+## v6 Models (clip10 Added)
+
+Retrained with 14 clips including newly labeled clip10_morningstart (09:00-09:10):
+| Model | CV F1 | Improvement on clip10 |
+|-------|-------|----------------------|
+| LEFT v6 | 0.828 | 0.824 → **0.889** (+0.065) |
+| RIGHT v6 | 0.829 | 0.880 → **0.923** (+0.043) |
+
+## Speed Optimizations (Configurable)
+
+```python
+# Production (default) — full accuracy
+c = TapingCounter(video, version="v4")
+
+# Training — 1.67x faster, ~0.02 F1 cost
+c = TapingCounter(video, version="v4", fast_mode=True)
+```
+
+| | Production | Fast Mode |
+|---|---|---|
+| Load detector | Every frame | Every 4th frame |
+| MOG2 | Always | Skip when air motion < 2.5 |
+| Speed | ~85fps | ~142fps |
+| 9-hr estimate | ~4.3 hrs | ~2.6 hrs |
+
+## Updated Per-Clip Evaluation (merged GT)
+
+| Clip | LEFT F1 | RIGHT F1 |
+|------|---------|----------|
+| clip1 morning | 0.909 | 0.971 |
+| clip2 prelunch | 1.000 | 0.941 |
+| clip3 postlunch | 1.000 | 1.000 |
+| clip4 afternoon | 0.982 | 1.000 |
+| clip8 afternoon | 0.941 | — |
+| clip9 latemorning | **0.946** | **0.957** |
+| clip10 morningstart | **0.889** | **0.923** |
+| clip11 breakperiod | 0.983 | 0.933 |
+| clip12 endofday | — | 1.000 |
+| clip13 h5idle | 0.970 | 0.969 |
+| clip14 h3lunch | 0.968 | 0.973 |
+
+## Labeling Priority (Next)
+1. Extract + label a 5-min clip from 14:00-14:30 (post-lunch peak)
+2. Extract + label a 5-min clip from 15:00-15:30 (darkest afternoon)
+3. Re-label clip8/clip9 with merged event windows (not per-frame)
+
+---
+
 # ✅ CH28.2 — Temporal NMS Shipped, F1=0.946 (2026-05-05)
 
 ## Headline
