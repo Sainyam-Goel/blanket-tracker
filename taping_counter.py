@@ -1466,9 +1466,6 @@ class TapingCounter:
                 print(f"[v4] per-table classifiers loaded "
                       f"(th_left={self.v4_threshold_left:.2f}, "
                       f"th_right={self.v4_threshold_right:.2f})")
-            # Lower LEFT threshold to 0.30 — weak afternoon tosses on dark table
-            # need a wider gate. Cycle-confirm + cooldown override will filter noise.
-            self.v4_threshold_left = 0.30
         else:
             # Fallback: single combined classifier
             pkl_path = config.get("v4_classifier_path",
@@ -2111,7 +2108,48 @@ class TapingCounter:
         if self.version == "v4":
             self._v4_flush_batch()
         elapsed = time.time() - start
+        # Apply temporal NMS — suppress weaker events within 5s of stronger ones
+        self._apply_temporal_nms()
+
         return self._build_results(frame_idx, duration_sec, elapsed)
+
+    def _apply_temporal_nms(self, window_sec=5.0):
+        """Suppress events within window_sec of a stronger one on the same table.
+
+        Sorts events by time, keeps the highest-prob event within each 5s window.
+        Weaker adjacent events are moved to suppressed_candidates as 'temporal_nms'.
+        """
+        if not self.events:
+            return
+        per_tbl = {"left": [], "right": []}
+        for e in self.events:
+            tbl = e.get("table", "")
+            if tbl in per_tbl:
+                per_tbl[tbl].append(e)
+
+        kept_all = []
+        nms_suppressed = 0
+        for tbl in ["left", "right"]:
+            evts = sorted(per_tbl[tbl],
+                          key=lambda e: (e["time_sec"], -e.get("v4_prob", 0)))
+            kept = []
+            for e in evts:
+                suppressed = False
+                for k in kept:
+                    if abs(e["time_sec"] - k["time_sec"]) <= window_sec:
+                        if e.get("v4_prob", 0) <= k.get("v4_prob", 0):
+                            suppressed = True
+                            break
+                if not suppressed:
+                    kept.append(e)
+                else:
+                    self.suppressed.append({**e, "reason": "temporal_nms"})
+                    nms_suppressed += 1
+            kept_all.extend(kept)
+
+        self.events = kept_all
+        if self.debug and nms_suppressed:
+            print(f"  [nms] suppressed {nms_suppressed} weaker events within {window_sec}s")
 
     def left_count(self):
         return sum(1 for e in self.events if e.get("table") == "left")
