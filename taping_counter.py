@@ -1374,6 +1374,8 @@ class TapingCounter:
         self.left_load_det = None
         self.right_load_det = None
         self.v4_last_load_t = {"left": -1.0, "right": -1.0}
+        self._load_frame_ctr = 0
+        self._load_frame_skip = 4  # process load detector every Nth frame
         if self.version == "v4":
             self._load_v4_classifier(config)
             self._init_load_detectors(config)
@@ -1919,19 +1921,21 @@ class TapingCounter:
                     ev = tracker.update(gray, frame_idx, t_sec, paused)
                     tracker_results.append(ev)
 
-                # Run dedicated load model for cycle-confirm gate
-                if self.left_load_det:
-                    self.left_load_det.process_frame(gray, frame, frame_idx, t_sec)
-                    if self.left_load_det.load_last_t > self.v4_last_load_t["left"]:
-                        self.v4_last_load_t["left"] = self.left_load_det.load_last_t
-                        if self.debug:
-                            print(f"  [{t_sec:6.1f}s] load LEFT  prob={self.left_load_det.load_prob:.2f}")
-                if self.right_load_det:
-                    self.right_load_det.process_frame(gray, frame, frame_idx, t_sec)
-                    if self.right_load_det.load_last_t > self.v4_last_load_t["right"]:
-                        self.v4_last_load_t["right"] = self.right_load_det.load_last_t
-                        if self.debug:
-                            print(f"  [{t_sec:6.1f}s] load RIGHT prob={self.right_load_det.load_prob:.2f}")
+                # Run dedicated load model for cycle-confirm gate (subsampled for speed)
+                self._load_frame_ctr += 1
+                if self._load_frame_ctr % self._load_frame_skip == 0:
+                    if self.left_load_det:
+                        self.left_load_det.process_frame(gray, frame, frame_idx, t_sec)
+                        if self.left_load_det.load_last_t > self.v4_last_load_t["left"]:
+                            self.v4_last_load_t["left"] = self.left_load_det.load_last_t
+                            if self.debug:
+                                print(f"  [{t_sec:6.1f}s] load LEFT  prob={self.left_load_det.load_prob:.2f}")
+                    if self.right_load_det:
+                        self.right_load_det.process_frame(gray, frame, frame_idx, t_sec)
+                        if self.right_load_det.load_last_t > self.v4_last_load_t["right"]:
+                            self.v4_last_load_t["right"] = self.right_load_det.load_last_t
+                            if self.debug:
+                                print(f"  [{t_sec:6.1f}s] load RIGHT prob={self.right_load_det.load_prob:.2f}")
 
                 # v4.1: populate ring buffer with training-identical dict format
                 if self.version == "v4":
