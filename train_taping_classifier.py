@@ -44,6 +44,7 @@ CLIPS_FOR_TRAINING = [
     "gt_clip11_breakperiod",       # break period with noted FPs (heap move, counting)
     "gt_clip12_endofday",          # end-of-day RIGHT-only (374 tosses R, 0 L)
     "gt_clip13_h5idle",            # Hour 5 active — 63 toss windows (L=32, R=31)
+    "gt_clip14_h3lunch",           # Hour 3 active — 50 toss windows (L=31, R=19)
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
@@ -481,6 +482,23 @@ def label_candidates(candidates, gt_clusters, tol_sec=MATCH_TOL_SEC, fps=25.0):
     return out
 
 
+def label_candidates_for_load(candidates, gt_clusters, tol_sec=MATCH_TOL_SEC, fps=25.0):
+    """Label candidates for LOAD detection."""
+    load_frames = {"left": set(), "right": set()}
+    for c in gt_clusters:
+        if c["type"] == "load":
+            for f in c.get("all_frames", [c["peak_frame"]]):
+                load_frames[c["table"]].add(f)
+    tol_frames = int(tol_sec * fps)
+    out = []
+    for cand in candidates:
+        tbl = cand["table"]
+        peak_f = int(cand["frame"])
+        nearest = min((abs(peak_f - f) for f in load_frames[tbl]), default=float("inf"))
+        out.append((cand, 1 if nearest <= tol_frames else 0))
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────
 #  Phase 0c: Coverage diagnostic
 # ─────────────────────────────────────────────────────────────────
@@ -541,7 +559,7 @@ def coverage_check(clip_name):
 #  Main
 # ─────────────────────────────────────────────────────────────────
 
-def build_dataset_for_clip(clip_name, verbose=True):
+def build_dataset_for_clip(clip_name, verbose=True, load_model=False):
     """Run candidate-collection on a clip, extract features for each candidate,
     label vs GT clusters. Returns (X, y, candidates) where:
       X : np.ndarray (N, n_features)
@@ -566,7 +584,10 @@ def build_dataset_for_clip(clip_name, verbose=True):
 
     if verbose: print(f"[{clip_name}] feature extraction…")
     X_rows, y_rows, enriched = [], [], []
-    labelled = label_candidates(candidates, clusters, fps=fps)
+    if load_model:
+        labelled = label_candidates_for_load(candidates, clusters, fps=fps)
+    else:
+        labelled = label_candidates(candidates, clusters, fps=fps)
     for cand, y in labelled:
         feats = extract_features(cand, frame_data)
         cand_with_feats = dict(cand)
@@ -753,6 +774,11 @@ PER_TABLE_OUT = {
     "right": "taping_pulse_classifier_toss_v4_right.pkl",
 }
 
+LOAD_MODEL_OUT = {
+    "left":  "taping_pulse_classifier_load_v4_left.pkl",
+    "right": "taping_pulse_classifier_load_v4_right.pkl",
+}
+
 
 def _make_clf(n_pos, n_neg, classifier="xgb"):
     """Create a classifier with balanced class handling.
@@ -808,20 +834,25 @@ FEATURE_NAMES_RIGHT = [
 ]  # 19 features — drops color (5) + asymmetry (3) which add noise on RIGHT
 
 
-def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
+def train_per_table_classifiers(out_dir=HERE, classifier="xgb", load_model=False):
     """Train separate classifiers for LEFT and RIGHT tables.
 
     Supports RandomForest ('rf') and XGBoost ('xgb').
     XGBoost typically +0.02-0.04 F1 over RF on tabular data with class imbalance.
+    If load_model=True, trains a LOAD detector instead of TOSS.
     """
+    model_type = "LOAD" if load_model else "TOSS"
+    out_map = LOAD_MODEL_OUT if load_model else PER_TABLE_OUT
     from sklearn.model_selection import StratifiedKFold, cross_val_score
     from sklearn.metrics import (
         precision_score, recall_score, f1_score, confusion_matrix,
     )
     import joblib
 
+    model_type = "LOAD" if load_model else "TOSS"
+    out_map = LOAD_MODEL_OUT if load_model else PER_TABLE_OUT
     print("=" * 70)
-    print(f"  CH27 v4 — PER-TABLE CLASSIFIERS (LEFT / RIGHT, {classifier.upper()})")
+    print(f"  CH27 v4 — PER-TABLE {model_type} CLASSIFIERS (LEFT / RIGHT, {classifier.upper()})")
     print("=" * 70)
 
     # Build per-clip datasets and split by table
@@ -830,7 +861,7 @@ def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
     per_clip = {}
 
     for clip in CLIPS_FOR_TRAINING:
-        res = build_dataset_for_clip(clip)
+        res = build_dataset_for_clip(clip, load_model=load_model)
         if res is None: continue
         X, y, enriched = res
         per_clip[clip] = (X, y, enriched)
@@ -946,7 +977,7 @@ def train_per_table_classifiers(out_dir=HERE, classifier="xgb"):
             print(f"\n  Feature importances: not available for {classifier}")
 
         # Save
-        pkl_path = Path(out_dir) / PER_TABLE_OUT[tbl]
+        pkl_path = Path(out_dir) / out_map[tbl]
         joblib.dump(clf, pkl_path, compress=3)
         print(f"\n  [saved] {pkl_path}")
 
@@ -1100,6 +1131,8 @@ def main():
                         help="Leave-one-clip-out CV (honest per-clip generalization)")
     parser.add_argument("--per-table", action="store_true",
                         help="Train separate classifiers for LEFT and RIGHT tables")
+    parser.add_argument("--load-model", action="store_true",
+                        help="Train LOAD detector instead of TOSS detector")
     parser.add_argument("--classifier", default="xgb", choices=["rf", "xgb", "stack"],
                         help="Classifier: rf=RandomForest, xgb=XGBoost, stack=RF+XGB averaged")
     args = parser.parse_args()
@@ -1155,7 +1188,8 @@ def main():
         return
 
     if args.per_table:
-        train_per_table_classifiers(classifier=args.classifier)
+        train_per_table_classifiers(classifier=args.classifier,
+                                    load_model=args.load_model)
         return
 
     # Default: train the classifier

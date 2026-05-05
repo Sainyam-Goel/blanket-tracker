@@ -88,6 +88,11 @@ RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
 LEFT_AIR_ROI_V2    = (272, 472, 831, 722)      # +30% R width
 RIGHT_AIR_ROI_V2   = (1092, 507, 1637, 808)    # +35% L width, +25% up
 
+# Landing-zone polygons for dedicated load model (user-calibrated via roi_calibrator_web.py)
+LEFT_LANDING_ZONE  = [313, 656, 195, 826, 537, 896, 639, 699]
+RIGHT_LANDING_ZONE = [1248, 791, 1301, 1021, 1657, 996, 1603, 812]
+TABLE_TEXTURE_LOAD_MARGIN = {"left": 4.0, "right": 8.0}
+
 TAPE_DISPENSER_LEFT_ROI  = (0, 750, 120, 950)     # legacy / unused
 TAPE_DISPENSER_RIGHT_ROI = (1800, 750, 1920, 950) # legacy / unused
 
@@ -254,6 +259,128 @@ V2_CONFIG = {
     # Smoothing
     "smooth_window": 5,
 }
+
+
+# ═══════════════════════════════════════════════════════════════
+#  LOAD DETECTOR — dedicated XGBoost model for cycle-confirm gate
+# ═══════════════════════════════════════════════════════════════
+
+class LoadDetector:
+    """Dedicated blanket-placement detector using table-texture derivative.
+
+    Maintains a rolling p20 baseline of raw table texture std-dev.
+    When texture spikes above baseline + MARGIN, triggers a candidate.
+    After a 3s AFTER window elapses, extracts 13 features and classifies
+    via XGBoost. Verified loads update load_last_t for the cycle-confirm gate.
+    """
+
+    def __init__(self, table_name, model_path, table_roi,
+                 landing_zone_coords, fps=25.0):
+        import joblib
+        self.name = table_name
+        self.model = joblib.load(model_path)
+        self.margin = TABLE_TEXTURE_LOAD_MARGIN[table_name]
+        self.fps = fps
+        self.table_roi = table_roi
+        self.load_last_t = -1.0
+        self.load_prob = 0.0
+
+        self.texture_buf = deque(maxlen=75)
+        self.last_trigger_t = -10.0
+        self.frame_buf = deque(maxlen=300)
+        self.pending = []
+
+        x1, y1, x2, y2 = table_roi
+        self.mx = (x1 + x2) // 2
+        self.my = (y1 + y2) // 2
+
+        pts = np.array([[landing_zone_coords[i], landing_zone_coords[i+1]]
+                        for i in range(0, len(landing_zone_coords), 2)],
+                       dtype=np.int32)
+        xs, ys = pts[:, 0], pts[:, 1]
+        self.lx1, self.ly1 = int(xs.min()), int(ys.min())
+        self.lx2, self.ly2 = int(xs.max()), int(ys.max())
+        h, w = self.ly2 - self.ly1, self.lx2 - self.lx1
+        mask = np.zeros((h, w), dtype=np.uint8)
+        shifted = pts - np.array([self.lx1, self.ly1])
+        cv2.fillPoly(mask, [shifted], 255)
+        self.land_mask = mask == 255
+
+    def process_frame(self, gray, frame, frame_idx, t_sec):
+        x1, y1, x2, y2 = self.table_roi
+        table_gray = gray[y1:y2, x1:x2]
+        table_std = float(np.std(table_gray))
+        table_mean = float(np.mean(table_gray))
+        table_bgr = frame[y1:y2, x1:x2]
+
+        if self.name == "left":
+            lr_gray = gray[self.my:y2, x1:self.mx]
+            lr_bgr = frame[self.my:y2, x1:self.mx]
+        else:
+            lr_gray = gray[self.my:y2, self.mx:x2]
+            lr_bgr = frame[self.my:y2, self.mx:x2]
+        lr_std = float(np.std(lr_gray))
+        lr_mean = float(np.mean(lr_gray))
+
+        land_gray = gray[self.ly1:self.ly2, self.lx1:self.lx2][self.land_mask]
+        land_color = frame[self.ly1:self.ly2, self.lx1:self.lx2, :][self.land_mask]
+
+        self.frame_buf.append({
+            "frame": frame_idx,
+            f"{self.name}_std": table_std,
+            f"{self.name}_mean": table_mean,
+            f"{self.name}_B": float(np.mean(table_bgr[:,:,0])),
+            f"{self.name}_G": float(np.mean(table_bgr[:,:,1])),
+            f"{self.name}_R": float(np.mean(table_bgr[:,:,2])),
+            f"{self.name}_lr_std": lr_std,
+            f"{self.name}_lr_mean": lr_mean,
+            f"{self.name}_lr_B": float(np.mean(lr_bgr[:,:,0])),
+            f"{self.name}_lr_G": float(np.mean(lr_bgr[:,:,1])),
+            f"{self.name}_lr_R": float(np.mean(lr_bgr[:,:,2])),
+            f"{self.name}_land_std": float(np.std(land_gray)),
+            f"{self.name}_land_mean": float(np.mean(land_gray)),
+            f"{self.name}_land_B": float(np.mean(land_color[:,0])),
+            f"{self.name}_land_G": float(np.mean(land_color[:,1])),
+            f"{self.name}_land_R": float(np.mean(land_color[:,2])),
+        })
+
+        self.texture_buf.append(table_std)
+
+        if len(self.texture_buf) >= 75:
+            baseline = float(np.percentile(self.texture_buf, 20))
+            strength = table_std - baseline
+            if strength > self.margin and (t_sec - self.last_trigger_t) >= 1.5:
+                self.last_trigger_t = t_sec
+                self.pending.append({
+                    "table": self.name,
+                    "frame": frame_idx,
+                    "trigger_strength": strength,
+                    "trigger_t": t_sec,
+                })
+
+        resolved = []
+        for i, cand in enumerate(self.pending):
+            if t_sec - cand["trigger_t"] >= 3.0:
+                if self._classify(cand):
+                    self.load_last_t = cand["trigger_t"]
+                resolved.append(i)
+
+        for i in reversed(resolved):
+            self.pending.pop(i)
+
+    def _classify(self, cand):
+        from train_load_model_v2 import extract_load_features, FEATURE_NAMES_LOAD
+        feats = extract_load_features(cand, list(self.frame_buf), self.fps)
+        feat_vec = np.array([[feats[n] for n in FEATURE_NAMES_LOAD]])
+        prob = float(self.model.predict_proba(feat_vec)[0, 1])
+        self.load_prob = prob
+        return prob >= 0.50
+
+    def flush_pending(self):
+        for cand in list(self.pending):
+            if self._classify(cand):
+                self.load_last_t = cand["trigger_t"]
+        self.pending.clear()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1216,6 +1343,7 @@ class TapingCounter:
         self.v4_feature_names = None
         self.v4_min_gap_sec = 3.0  # final cooldown AFTER classifier accepts
         self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
+        self.v4_last_emit_prob = {"left": 0.0, "right": 0.0}
         # Dynamic threshold: if no high-confidence toss in the last N seconds,
         # raise the classifier decision threshold (conservative mode).
         # During active periods: air peaks ~9-10 typical. During breaks:
@@ -1242,8 +1370,31 @@ class TapingCounter:
         self._BRSIG = 5
         self._BLAIR = 6
         self._BRAIR = 7
+        # Load detector slots (initialised in _init_load_detectors for v4)
+        self.left_load_det = None
+        self.right_load_det = None
+        self.v4_last_load_t = {"left": -1.0, "right": -1.0}
         if self.version == "v4":
             self._load_v4_classifier(config)
+            self._init_load_detectors(config)
+
+    def _init_load_detectors(self, config):
+        from pathlib import Path
+        base = Path(__file__).resolve().parent
+        left_pkl = base / "taping_load_texture_classifier_v1_left.pkl"
+        right_pkl = base / "taping_load_texture_classifier_v1_right.pkl"
+        if left_pkl.exists() and right_pkl.exists():
+            self.left_load_det = LoadDetector(
+                "left", str(left_pkl), self.left_roi, LEFT_LANDING_ZONE, self.fps)
+            self.right_load_det = LoadDetector(
+                "right", str(right_pkl), self.right_roi, RIGHT_LANDING_ZONE, self.fps)
+            self.v4_last_load_t = {"left": -1.0, "right": -1.0}
+            if self.debug:
+                print("[v4] load detectors initialised (cycle-confirm gate)")
+        else:
+            self.left_load_det = None
+            self.right_load_det = None
+            self.v4_last_load_t = {"left": -1.0, "right": -1.0}
 
     # ── v4 classifier helpers ───────────────────────────────────
 
@@ -1258,9 +1409,17 @@ class TapingCounter:
         from pathlib import Path
         base = Path(__file__).resolve().parent
 
-        # Check for per-table classifiers first
-        left_pkl = base / "taping_pulse_classifier_toss_v4_left.pkl"
-        right_pkl = base / "taping_pulse_classifier_toss_v4_right.pkl"
+        # Check for per-table classifiers — prefer v5, fall back to v4.
+        # LEFT: v4 preferred (v5 arm-swing negatives regressed afternoon recall).
+        # RIGHT: v5 preferred (arm-swing negatives cleaned up god-tier FPs).
+        for ver in ["v4"]:
+            left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
+            if left_pkl.exists():
+                break
+        for ver in ["v5", "v4"]:
+            right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
+            if right_pkl.exists():
+                break
         use_per_table = left_pkl.exists() and right_pkl.exists()
 
         if use_per_table:
@@ -1307,6 +1466,9 @@ class TapingCounter:
                 print(f"[v4] per-table classifiers loaded "
                       f"(th_left={self.v4_threshold_left:.2f}, "
                       f"th_right={self.v4_threshold_right:.2f})")
+            # Lower LEFT threshold to 0.30 — weak afternoon tosses on dark table
+            # need a wider gate. Cycle-confirm + cooldown override will filter noise.
+            self.v4_threshold_left = 0.30
         else:
             # Fallback: single combined classifier
             pkl_path = config.get("v4_classifier_path",
@@ -1470,6 +1632,17 @@ class TapingCounter:
             # Cooldown gate — enforce min_gap within same batch
             prev_t = self.v4_last_emit_t[tbl]
             if prev_t > 0 and (payload["time_sec"] - prev_t) < self.v4_min_gap_sec:
+                # Cooldown override: if MUCH stronger, arm-swing stole the window.
+                # Update state (correct timestamp) but do NOT emit a duplicate event.
+                last_prob = self.v4_last_emit_prob.get(tbl, 0)
+                if prob > (last_prob + 0.20):
+                    self.v4_last_emit_t[tbl] = payload["time_sec"]
+                    self.v4_last_emit_prob[tbl] = prob
+                    self.suppressed.append({
+                        **payload,
+                        "reason": "cooldown_override",
+                    })
+                    continue
                 self.suppressed.append({
                     **payload,
                     "reason": "cooldown",
@@ -1477,11 +1650,21 @@ class TapingCounter:
                 continue
 
             # Cycle-confirm gate — borderline tosses require recent load
-            gotier = prob >= 0.85
-            borderline = 0.50 <= prob < 0.85
+            # Asymmetric tuning: LEFT load model is weaker (F1=0.822 vs RIGHT=0.931)
+            # LEFT: trust toss model more (god_tier=0.70), lower borderline (0.35)
+            #       to rescue mathematically weak afternoon tosses on dark table
+            # RIGHT: tighter thresholds (god_tier=0.85, max load delay 45s)
+            if tbl == "left":
+                god_tier = prob >= 0.70
+                borderline = 0.35 <= prob < 0.70
+                max_load_delay = 90.0
+            else:
+                god_tier = prob >= 0.85
+                borderline = 0.50 <= prob < 0.85
+                max_load_delay = 45.0
             if borderline:
-                load_t = self.left.last_load_start_t if tbl == "left" else self.right.last_load_start_t
-                load_window = 10.0 <= (payload["time_sec"] - load_t) <= 45.0
+                load_t = self.v4_last_load_t[tbl]
+                load_window = 3.0 <= (payload["time_sec"] - load_t) <= max_load_delay
                 if not load_window:
                     self.suppressed.append({
                         **payload,
@@ -1493,6 +1676,7 @@ class TapingCounter:
             payload["cycle_duration_sec"] = round(
                 max(0, payload["time_sec"] - max(0, prev_t)), 2)
             self.v4_last_emit_t[tbl] = payload["time_sec"]
+            self.v4_last_emit_prob[tbl] = prob
             self.events.append(payload)
             if self.debug:
                 thresh_str = (f" thr={eff_thresh:.2f}"
@@ -1738,6 +1922,20 @@ class TapingCounter:
                     ev = tracker.update(gray, frame_idx, t_sec, paused)
                     tracker_results.append(ev)
 
+                # Run dedicated load model for cycle-confirm gate
+                if self.left_load_det:
+                    self.left_load_det.process_frame(gray, frame, frame_idx, t_sec)
+                    if self.left_load_det.load_last_t > self.v4_last_load_t["left"]:
+                        self.v4_last_load_t["left"] = self.left_load_det.load_last_t
+                        if self.debug:
+                            print(f"  [{t_sec:6.1f}s] load LEFT  prob={self.left_load_det.load_prob:.2f}")
+                if self.right_load_det:
+                    self.right_load_det.process_frame(gray, frame, frame_idx, t_sec)
+                    if self.right_load_det.load_last_t > self.v4_last_load_t["right"]:
+                        self.v4_last_load_t["right"] = self.right_load_det.load_last_t
+                        if self.debug:
+                            print(f"  [{t_sec:6.1f}s] load RIGHT prob={self.right_load_det.load_prob:.2f}")
+
                 # v4.1: populate ring buffer with training-identical dict format
                 if self.version == "v4":
                     self.v4_frame_buf.append({
@@ -1900,6 +2098,15 @@ class TapingCounter:
         if total_frames > 0:
             sys.stdout.write("\n")
             sys.stdout.flush()
+        # Flush pending load candidates (no 3s wait at end of video)
+        if self.left_load_det:
+            self.left_load_det.flush_pending()
+            if self.left_load_det.load_last_t > self.v4_last_load_t["left"]:
+                self.v4_last_load_t["left"] = self.left_load_det.load_last_t
+        if self.right_load_det:
+            self.right_load_det.flush_pending()
+            if self.right_load_det.load_last_t > self.v4_last_load_t["right"]:
+                self.v4_last_load_t["right"] = self.right_load_det.load_last_t
         # Flush any remaining batched v4 candidates
         if self.version == "v4":
             self._v4_flush_batch()
