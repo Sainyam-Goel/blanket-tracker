@@ -884,8 +884,9 @@ class _TableTrackerV2:
         # so the flying blanket doesn't become part of the background.
         # Skip MOG2 entirely when air motion is near zero (saves ~18% CPU).
         # Only active in fast_mode; accurate mode always runs MOG2.
-        air_live = self.in_air_pulse or (self._fast_mode and raw_motion > 2.5)
-        if air_live or not self.air_mog2_warmed or not self._fast_mode:
+        fast = getattr(self, '_fast_mode', False)
+        air_live = self.in_air_pulse or (fast and raw_motion > 2.5)
+        if air_live or not self.air_mog2_warmed or not fast:
             air_uint8 = air.astype(np.uint8) if air.dtype != np.uint8 else air
             learn_rate = 0.0 if self.in_air_pulse else -1.0
             air_fg_mask = self.air_mog2.apply(air_uint8, learningRate=learn_rate)
@@ -1422,16 +1423,13 @@ class TapingCounter:
         from pathlib import Path
         base = Path(__file__).resolve().parent
 
-        # Check for per-table classifiers — prefer v5, fall back to v4.
-        # LEFT: v4 preferred (v5 arm-swing negatives regressed afternoon recall).
-        # RIGHT: v5 preferred (arm-swing negatives cleaned up god-tier FPs).
-        for ver in ["v4"]:
+        # Check for per-table classifiers — prefer v6, fall back through versions.
+        # LEFT: v4 preferred (v5/v6 arm-swing negatives regressed afternoon recall).
+        # RIGHT: prefer newest model.
+        for ver in ["v6", "v5", "v4"]:
             left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
-            if left_pkl.exists():
-                break
-        for ver in ["v5", "v4"]:
             right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
-            if right_pkl.exists():
+            if left_pkl.exists() and right_pkl.exists():
                 break
         use_per_table = left_pkl.exists() and right_pkl.exists()
 
@@ -1821,6 +1819,8 @@ class TapingCounter:
             # the classifier is applied AFTER each candidate emerges
             self.left  = _TableTrackerV2("left",  self.left_roi,  self.left_air_roi,  self.fps, self.v2_cfg)
             self.right = _TableTrackerV2("right", self.right_roi, self.right_air_roi, self.fps, self.v2_cfg)
+            self.left._fast_mode = self._fast_mode
+            self.right._fast_mode = self._fast_mode
         else:
             self.left  = _TableTracker("left",  self.left_roi,  self.fps, self.tracker_cfg)
             self.right = _TableTracker("right", self.right_roi, self.fps, self.tracker_cfg)

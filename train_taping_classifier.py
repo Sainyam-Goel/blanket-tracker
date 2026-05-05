@@ -45,6 +45,7 @@ CLIPS_FOR_TRAINING = [
     "gt_clip12_endofday",          # end-of-day RIGHT-only (374 tosses R, 0 L)
     "gt_clip13_h5idle",            # Hour 5 active — 63 toss windows (L=32, R=31)
     "gt_clip14_h3lunch",           # Hour 3 active — 50 toss windows (L=31, R=19)
+    "gt_clip10_morningstart",      # 09:00-09:10 early morning, 9L+25R (new)
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
