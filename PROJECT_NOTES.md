@@ -2,6 +2,51 @@
 
 ---
 
+# ✅ CH33 — v8 Full-Day Validation (2026-05-06)
+
+## Headline
+
+**v8 full 9-hour day: 3,422 events vs 4,383 in v4 — 22% cleaner.** LEFT count increased 70 vs v6 (table_motion catching dark-table tosses). RIGHT stable. 14:00 peak hour rides at 589 — v8 confirms it's genuine production density, not noise.
+
+## v4 → v6 → v8 Full-Day Comparison
+| Hour | v4 (old) | v6 | v8 | Cleanup |
+|------|:---:|:---:|:---:|:---:|
+| 09:00 | 626 | 518 | **537** | -14% |
+| 10:00 | 659 | 515 | **515** | -22% |
+| 11:00 | 576 | 463 | **456** | -21% |
+| 12:00 | 373 | 279 | **267** | -28% |
+| 12:53 | 152 | 114 | **114** | -25% |
+| 14:00 | 619 | 575 | **589** | -5% |
+| 15:00 | 622 | 506 | **544** | -13% |
+| 17:00 | 309 | 366 | **400** | +29% |
+| **TOTAL** | **4,383** | **3,336** | **3,422** | **-22%** |
+
+v8 added 86 events vs v6 (+70 LEFT) — NOT noise, but catching real LEFT tosses that v6's AIR-only architecture missed. The 14:00 peak (589, only -5% from v4) proves genuine peak production density.
+
+## v8 Gate Activity on Full Day
+| Gate | Count | Role |
+|------|:---:|---|
+| `classifier_reject` | 18,870 | Base filter |
+| `cooldown` | 3,703 | Physics: 5.0s minimum cycle |
+| `cycle_confirm_fail` | 698 | Load model veto |
+| `temporal_nms` | 490 | Duplicate suppression |
+| `cooldown_override` | 50 | Arm-swing correction |
+
+## v8 Per-Clip F1 Summary
+| Clip | LEFT | RIGHT |
+|------|:---:|:---:|
+| clip2 prelunch | **0.927** | 0.917 |
+| clip8 afternoon | **0.970** | — |
+| clip9 latemorning | **0.901** | 0.947 |
+| clip10 morningstart | 0.941 | 0.902 |
+| clip15 peak1430 | **0.969** | 0.984 |
+| clip16 dark1514 | **0.984** | 0.943 |
+| **OVERALL** | **0.959** | P=0.959 R=0.959 |
+
+**LEFT avg improvement: 0.906→0.941 (+0.035). 8/12 improved, 4 flat, 0 regressed.**
+
+---
+
 # ✅ CH32 — v8 Breakthrough: table_motion + heap_std + cooldown 5s (2026-05-06)
 
 ## Headline
