@@ -94,6 +94,11 @@ FEATURE_NAMES = [
     "table_solidity",     # contour_area / bbox_area at pre-peak (high=compact blanket, low=messy)
     # Overlap detection — when blanket B loads before blanket A finishes leaving
     "table_transition_var", # max frame-to-frame signal derivative (high=instability)
+    # Heap texture — spikes when blanket lands on pile during toss
+    "heap_std_step",       # heap std AFTER - BEFORE (spike = toss, flat = no toss)
+    # Full-table motion — frame-to-frame pixel diff captures throw vs arm swing
+    "table_motion_peak",   # max full-table motion in toss window
+    "table_motion_mean",   # mean full-table motion across all toss frames
 ]
 
 
@@ -438,6 +443,18 @@ def extract_features(candidate, frame_data):
         "table_transition_var": float(
             np.max(np.abs(np.diff(sig_series)))
             if len(sig_series) > 1 else 0.0),
+        # Heap texture step — spikes when blanket lands on pile during toss
+        "heap_std_step": float(
+            (np.median([r.get(f"{table}_heap_std", 0) for r in window[peak_idx:]])
+             - np.median([r.get(f"{table}_heap_std", 0) for r in window[:peak_idx + 1]])))
+            if len(window) > 2 else 0.0,
+        # Full-table motion — frame-to-frame pixel diff captures throw strength
+        "table_motion_peak": float(
+            np.max([r.get(f"{table}_table_motion", 0) for r in window]))
+            if window else 0.0,
+        "table_motion_mean": float(
+            np.mean([r.get(f"{table}_table_motion", 0) for r in window]))
+            if window else 0.0,
     }
 
 

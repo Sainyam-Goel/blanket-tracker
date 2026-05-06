@@ -1451,7 +1451,7 @@ class TapingCounter:
         # Check for per-table classifiers — prefer v6, fall back through versions.
         # LEFT: v4 preferred (v5/v6 arm-swing negatives regressed afternoon recall).
         # RIGHT: prefer newest model.
-        for ver in ["v7", "v6", "v5", "v4"]:
+        for ver in ["v8", "v7", "v6", "v5", "v4"]:
             left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
             right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
             if left_pkl.exists() and right_pkl.exists():
@@ -1901,6 +1901,24 @@ class TapingCounter:
             R_LR_bgr = frame[R_my:R_y2, R_mx:R_x2]
             R_UR_bgr = frame[R_y1:R_my, R_mx:R_x2]
             R_LL_bgr = frame[R_my:R_y2, R_x1:R_mx]
+            # Heap surface — texture spikes when blanket lands on pile
+            LH_x1, LH_y1, LH_x2, LH_y2 = LEFT_HEAP_ROI
+            RH_x1, RH_y1, RH_x2, RH_y2 = RIGHT_HEAP_ROI
+            L_heap_std = float(np.std(gray[LH_y1:LH_y2, LH_x1:LH_x2]))
+            R_heap_std = float(np.std(gray[RH_y1:RH_y2, RH_x1:RH_x2]))
+            # Full-table motion — frame-to-frame diff captures blanket throw/arm swing
+            if not hasattr(self, '_prev_L_table'):
+                self._prev_L_table = gray[L_y1:L_y2, L_x1:L_x2].astype(np.float32)
+                self._prev_R_table = gray[R_y1:R_y2, R_x1:R_x2].astype(np.float32)
+                L_table_motion = 0.0
+                R_table_motion = 0.0
+            else:
+                L_now = gray[L_y1:L_y2, L_x1:L_x2].astype(np.float32)
+                R_now = gray[R_y1:R_y2, R_x1:R_x2].astype(np.float32)
+                L_table_motion = float(np.mean(np.abs(L_now - self._prev_L_table)))
+                R_table_motion = float(np.mean(np.abs(R_now - self._prev_R_table)))
+                self._prev_L_table = L_now
+                self._prev_R_table = R_now
             # Air zone halves — upper = toss direction, lower = arm follow-through
             LA_x1, LA_y1, LA_x2, LA_y2 = self.left_air_roi
             RA_x1, RA_y1, RA_x2, RA_y2 = self.right_air_roi
@@ -2003,6 +2021,10 @@ class TapingCounter:
                         "right_LL_mean": round(float(np.mean(R_LL_bgr)), 2),
                         "left_state": self.left.state,
                         "right_state": self.right.state,
+                        "left_heap_std": round(L_heap_std, 2),
+                        "right_heap_std": round(R_heap_std, 2),
+                        "left_table_motion": round(L_table_motion, 2),
+                        "right_table_motion": round(R_table_motion, 2),
                         "paused": paused,
                     })
 
@@ -2092,6 +2114,10 @@ class TapingCounter:
                         "right_LL_mean": round(float(np.mean(R_LL_bgr)), 2),
                         "left_state": self.left.state,
                         "right_state": self.right.state,
+                        "left_heap_std": round(L_heap_std, 2),
+                        "right_heap_std": round(R_heap_std, 2),
+                        "left_table_motion": round(L_table_motion, 2),
+                        "right_table_motion": round(R_table_motion, 2),
                         "paused": paused,
                     })
                 else:

@@ -27,9 +27,12 @@
     "blob_trajectory_x",
     "blob_y_centroid",
     "table_solidity",
-    "table_transition_var"
+    "table_transition_var",
+    "heap_std_step",
+    "table_motion_peak",
+    "table_motion_mean"
   ],
-  "n_features": 27,
+  "n_features": 30,
   "trained_at": "2026-05-05T00:59:47.913605",
   "training_clips": [
     "gt_clip1_morning",
@@ -189,5 +192,6 @@
       "cluster_p": 0.3902439024390244,
       "cluster_r": 0.01805869074492099
     }
-  }
+  },
+  "model_version": "v8"
 }
