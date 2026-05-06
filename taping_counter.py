@@ -309,6 +309,8 @@ class LoadDetector:
         cv2.fillPoly(mask, [shifted], 255)
         self.land_mask = mask == 255
 
+        self.prev_table = None  # for per-frame full-table motion
+
     def process_frame(self, gray, frame, frame_idx, t_sec):
         x1, y1, x2, y2 = self.table_roi
         table_gray = gray[y1:y2, x1:x2]
@@ -328,6 +330,14 @@ class LoadDetector:
         land_gray = gray[self.ly1:self.ly2, self.lx1:self.lx2][self.land_mask]
         land_color = frame[self.ly1:self.ly2, self.lx1:self.lx2, :][self.land_mask]
 
+        # Full-table motion — blanket throw slides across table
+        table_now = gray[y1:y2, x1:x2].astype(np.float32)
+        if self.prev_table is not None:
+            table_motion = float(np.mean(np.abs(table_now - self.prev_table)))
+        else:
+            table_motion = 0.0
+        self.prev_table = table_now
+
         self.frame_buf.append({
             "frame": frame_idx,
             f"{self.name}_std": table_std,
@@ -345,6 +355,7 @@ class LoadDetector:
             f"{self.name}_land_B": float(np.mean(land_color[:,0])),
             f"{self.name}_land_G": float(np.mean(land_color[:,1])),
             f"{self.name}_land_R": float(np.mean(land_color[:,2])),
+            f"{self.name}_motion": table_motion,
         })
 
         self.texture_buf.append(table_std)

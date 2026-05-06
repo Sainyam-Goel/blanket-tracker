@@ -56,6 +56,9 @@ FEATURE_NAMES_LOAD = [
     # Duration context
     "trigger_height",         # how high was the texture spike?
     "trigger_duration",       # how long did the spike last?
+    # Full-table motion — blanket throw slides across table, shifts lower→upper
+    "table_motion_peak",      # max frame-diff in table ROI during load window
+    "table_motion_early",     # mean motion in first 40% of AFTER window
     # Lower-right quadrant of table ROI — clean blanket sliding zone
     "lr_quad_std_step",       # texture change in lower-right quadrant
     "lr_quad_mean_step",      # brightness change in lower-right quadrant
@@ -121,6 +124,7 @@ def generate_load_candidates(video_path, fps=25.0):
 
     candidates = []
     last_trigger = {"left": -1e9, "right": -1e9}
+    prev_table = {"left": None, "right": None}  # prev full table gray for motion
 
     while True:
         ret, frame = cap.read()
@@ -180,6 +184,15 @@ def generate_load_candidates(video_path, fps=25.0):
             else:
                 for fld in ["land_std","land_mean","land_B","land_G","land_R"]:
                     frame_entry[f"{tbl}_{fld}"] = 0.0
+
+            # Full-table motion — blanket throw slides across table surface
+            table_now = gray[y1:y2, x1:x2].astype(np.float32)
+            if prev_table[tbl] is not None:
+                table_motion = float(np.mean(np.abs(table_now - prev_table[tbl])))
+            else:
+                table_motion = 0.0
+            prev_table[tbl] = table_now
+            frame_entry[f"{tbl}_motion"] = table_motion
 
             # Track texture for derivative
             texture_history[tbl].append(raw_std)
@@ -282,6 +295,14 @@ def extract_load_features(candidate, frame_data, fps=25.0):
     trigger_height = float(candidate.get("trigger_strength", 0))
     trigger_duration = float(len(after) - len(before)) / fps
 
+    # Full-table motion — blanket throw slides across table, shifts lower→upper
+    motion_key = f"{tbl}_motion"
+    all_motion = [r.get(motion_key, 0) for r in window if r.get(motion_key, 0) > 0]
+    table_motion_peak = float(np.max(all_motion)) if all_motion else 0.0
+    # Motion concentrated in first 40% of AFTER (blanket throw phase)
+    early_after = after[:max(1, int(len(after) * 0.4))]
+    table_motion_early = float(np.mean([r.get(motion_key, 0) for r in early_after]))
+
     # Lower-right quadrant features — cleanest blanket sliding signal
     lr_std_key = f"{tbl}_lr_std"
     lr_mean_key = f"{tbl}_lr_mean"
@@ -319,6 +340,8 @@ def extract_load_features(candidate, frame_data, fps=25.0):
         "table_solidity_after": table_solidity_after,
         "trigger_height": round(trigger_height, 2),
         "trigger_duration": round(trigger_duration, 2),
+        "table_motion_peak": round(table_motion_peak, 2),
+        "table_motion_early": round(table_motion_early, 2),
         "lr_quad_std_step": round(lr_quad_std_step, 2),
         "lr_quad_mean_step": round(lr_quad_mean_step, 2),
         "lr_quad_color_shift": round(lr_quad_color_shift, 2),
