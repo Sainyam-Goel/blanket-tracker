@@ -1370,6 +1370,10 @@ class TapingCounter:
         self.v4_min_gap_sec = 5.0  # final cooldown AFTER classifier accepts (~minimum cycle)
         self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
         self.v4_last_emit_prob = {"left": 0.0, "right": 0.0}
+        # Cold-start warmup: raise LEFT threshold for first N seconds of video
+        # to suppress morning noise (arm-swing double-fires, load model settling)
+        self.v4_warmup_sec = float(config.get("v4_warmup_sec", 1800))  # 30 min
+        self.v4_warmup_boost = float(config.get("v4_warmup_boost", 0.08))  # +0.08 LEFT
         # Dynamic threshold: if no high-confidence toss in the last N seconds,
         # raise the classifier decision threshold (conservative mode).
         # During active periods: air peaks ~9-10 typical. During breaks:
@@ -1641,6 +1645,10 @@ class TapingCounter:
             base_thresh = (self.v4_threshold_left if tbl == "left"
                            else self.v4_threshold_right) if isinstance(
                                self.v4_classifier, dict) else self.v4_threshold
+            # Cold-start warmup: raise LEFT threshold for first N seconds
+            # to suppress morning arm-swing double-fires + load model settling
+            if tbl == "left" and payload["time_sec"] < self.v4_warmup_sec:
+                base_thresh += self.v4_warmup_boost
             eff_thresh = self._v4_conservative_threshold(
                 tbl, payload["time_sec"], base_thresh)
             keep = prob > eff_thresh
