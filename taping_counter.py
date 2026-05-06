@@ -1371,7 +1371,7 @@ class TapingCounter:
         self.v4_classifier = None
         self.v4_threshold = 0.5
         self.v4_feature_names = None
-        self.v4_min_gap_sec = 3.0  # final cooldown AFTER classifier accepts
+        self.v4_min_gap_sec = 5.0  # final cooldown AFTER classifier accepts (~minimum cycle)
         self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
         self.v4_last_emit_prob = {"left": 0.0, "right": 0.0}
         # Dynamic threshold: if no high-confidence toss in the last N seconds,
