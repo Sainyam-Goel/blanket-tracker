@@ -72,7 +72,10 @@ import numpy as np
 # v1 ROIs — wider, included surrounding floor (worked OK with mean+std signal)
 LEFT_TABLE_ROI  = (60, 700, 580, 1000)    # x1, y1, x2, y2
 RIGHT_TABLE_ROI = (1280, 700, 1860, 1000)
-HEAP_ROI        = (700, 350, 1220, 750)   # validation-only
+HEAP_ROI        = (700, 350, 1220, 750)   # legacy — replaced by per-table heap
+# Per-table heap landing zones (user-calibrated via roi_calibrator_web.py, 2026-05-06)
+LEFT_HEAP_ROI   = (409, 478, 756, 684)     # heap top surface, LEFT table view
+RIGHT_HEAP_ROI  = (1087, 487, 1554, 780)    # heap top surface, RIGHT table view
 
 # v2 ROIs — calibrated against the empty-state frame and user-tuned via
 # roi_calibrator_web.py (2026-05-03).
