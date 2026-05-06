@@ -81,10 +81,6 @@ RIGHT_HEAP_ROI  = (1087, 487, 1554, 780)    # heap top surface, RIGHT table view
 # roi_calibrator_web.py (2026-05-03).
 LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
 RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
-# v2 ROIs — calibrated against the empty-state frame and user-tuned via
-# roi_calibrator_web.py (2026-05-03).
-LEFT_TABLE_ROI_V2  = (188, 684, 687, 1068)
-RIGHT_TABLE_ROI_V2 = (1243, 816, 1734, 1073)
 # EXPANDED AIR ROIS — experiment (2026-05-04)
 # LEFT:  30% wider to the right (430→559px)
 # RIGHT: 35% wider to the left (404→545px) + 25% taller up (241→301px)
@@ -1418,9 +1414,8 @@ class TapingCounter:
         base = Path(__file__).resolve().parent
         left_pkl = base / "taping_load_texture_classifier_v2_left.pkl"
         right_pkl = base / "taping_load_texture_classifier_v2_right.pkl"
-        if not left_pkl.exists():
+        if not (left_pkl.exists() and right_pkl.exists()):
             left_pkl = base / "taping_load_texture_classifier_v1_left.pkl"
-        if not right_pkl.exists():
             right_pkl = base / "taping_load_texture_classifier_v1_right.pkl"
         if left_pkl.exists() and right_pkl.exists():
             self.left_load_det = LoadDetector(
@@ -1448,10 +1443,8 @@ class TapingCounter:
         from pathlib import Path
         base = Path(__file__).resolve().parent
 
-        # Check for per-table classifiers — prefer v6, fall back through versions.
-        # LEFT: v4 preferred (v5/v6 arm-swing negatives regressed afternoon recall).
-        # RIGHT: prefer newest model.
-        for ver in ["v8", "v7", "v6", "v5", "v4"]:
+        # Load latest available per-table classifiers (v8 → v7 → fallback)
+        for ver in ["v8", "v7"]:
             left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
             right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
             if left_pkl.exists() and right_pkl.exists():
