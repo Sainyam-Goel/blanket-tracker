@@ -27,7 +27,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from train_taping_classifier import CLIPS_FOR_TRAINING, cluster_labels, load_clip_gt
-from taping_counter import LEFT_TABLE_ROI_V2, RIGHT_TABLE_ROI_V2
+from taping_counter import LEFT_TABLE_ROI_V2, RIGHT_TABLE_ROI_V2, LEFT_HEAP_ROI, RIGHT_HEAP_ROI
 
 # ═══════════════════════════════════════════════════════════════
 # Config
@@ -67,6 +67,8 @@ FEATURE_NAMES_LOAD = [
     "landing_std_step",       # texture in landing polygon BEFORE→AFTER
     "landing_mean_step",      # brightness change in landing polygon
     "landing_color_shift",    # BGR color change in landing polygon
+    # Heap texture — blankets pile up on heap after toss, unchanged during load
+    "heap_std_step",          # heap std AFTER - BEFORE (near zero = load, spike = toss)
 ]
 
 
@@ -90,6 +92,10 @@ def generate_load_candidates(video_path, fps=25.0):
     rois = {
         "left":  LEFT_TABLE_ROI_V2,
         "right": RIGHT_TABLE_ROI_V2,
+    }
+    heap_rois = {
+        "left":  LEFT_HEAP_ROI,
+        "right": RIGHT_HEAP_ROI,
     }
 
     # Rolling buffer of raw table texture (std-dev) per table
@@ -193,6 +199,11 @@ def generate_load_candidates(video_path, fps=25.0):
                 table_motion = 0.0
             prev_table[tbl] = table_now
             frame_entry[f"{tbl}_motion"] = table_motion
+
+            # Heap texture — pile state: unchanged during load, spikes at toss
+            hx1, hy1, hx2, hy2 = heap_rois[tbl]
+            heap_gray = gray[hy1:hy2, hx1:hx2]
+            frame_entry[f"{tbl}_heap_std"] = float(np.std(heap_gray))
 
             # Track texture for derivative
             texture_history[tbl].append(raw_std)
@@ -330,6 +341,12 @@ def extract_load_features(candidate, frame_data, fps=25.0):
         abs(np.median([r.get(land("G"), 0) for r in after]) - np.median([r.get(land("G"), 0) for r in before])) +
         abs(np.median([r.get(land("R"), 0) for r in after]) - np.median([r.get(land("R"), 0) for r in before])))
 
+    # Heap texture step — unchanged during load, spikes at toss
+    heap_key = f"{tbl}_heap_std"
+    before_heap = np.median([r.get(heap_key, 0) for r in before])
+    after_heap = np.median([r.get(heap_key, 0) for r in after])
+    heap_std_step = after_heap - before_heap
+
     return {
         "table_texture_step": round(table_texture_step, 2),
         "table_mean_step": round(table_mean_step, 2),
@@ -346,6 +363,7 @@ def extract_load_features(candidate, frame_data, fps=25.0):
         "landing_std_step": round(landing_std_step, 2),
         "landing_mean_step": round(landing_mean_step, 2),
         "landing_color_shift": round(landing_color_shift, 2),
+        "heap_std_step": round(heap_std_step, 2),
     }
 
 

@@ -338,6 +338,12 @@ class LoadDetector:
             table_motion = 0.0
         self.prev_table = table_now
 
+        # Heap texture — pile state (unchanged during load, spikes at toss)
+        heap_roi = LEFT_HEAP_ROI if self.name == "left" else RIGHT_HEAP_ROI
+        hx1, hy1, hx2, hy2 = heap_roi
+        heap_gray = gray[hy1:hy2, hx1:hx2]
+        heap_std = float(np.std(heap_gray))
+
         self.frame_buf.append({
             "frame": frame_idx,
             f"{self.name}_std": table_std,
@@ -356,6 +362,7 @@ class LoadDetector:
             f"{self.name}_land_G": float(np.mean(land_color[:,1])),
             f"{self.name}_land_R": float(np.mean(land_color[:,2])),
             f"{self.name}_motion": table_motion,
+            f"{self.name}_heap_std": heap_std,
         })
 
         self.texture_buf.append(table_std)
@@ -385,9 +392,7 @@ class LoadDetector:
     def _classify(self, cand):
         from train_load_model_v2 import extract_load_features, FEATURE_NAMES_LOAD
         feats = extract_load_features(cand, list(self.frame_buf), self.fps)
-        # Use only original 13 features until load model retrained with 15
-        feat_names = FEATURE_NAMES_LOAD[:13]
-        feat_vec = np.array([[feats[n] for n in feat_names]])
+        feat_vec = np.array([[feats[n] for n in FEATURE_NAMES_LOAD]])
         prob = float(self.model.predict_proba(feat_vec)[0, 1])
         self.load_prob = prob
         return prob >= 0.50
@@ -1411,8 +1416,12 @@ class TapingCounter:
     def _init_load_detectors(self, config):
         from pathlib import Path
         base = Path(__file__).resolve().parent
-        left_pkl = base / "taping_load_texture_classifier_v1_left.pkl"
-        right_pkl = base / "taping_load_texture_classifier_v1_right.pkl"
+        left_pkl = base / "taping_load_texture_classifier_v2_left.pkl"
+        right_pkl = base / "taping_load_texture_classifier_v2_right.pkl"
+        if not left_pkl.exists():
+            left_pkl = base / "taping_load_texture_classifier_v1_left.pkl"
+        if not right_pkl.exists():
+            right_pkl = base / "taping_load_texture_classifier_v1_right.pkl"
         if left_pkl.exists() and right_pkl.exists():
             self.left_load_det = LoadDetector(
                 "left", str(left_pkl), self.left_roi, LEFT_LANDING_ZONE, self.fps)
