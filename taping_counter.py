@@ -1444,7 +1444,7 @@ class TapingCounter:
         base = Path(__file__).resolve().parent
 
         # Load latest available per-table classifiers (v8 → v7 → fallback)
-        for ver in ["v8", "v7"]:
+        for ver in ["v9", "v8", "v7"]:
             left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
             right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
             if left_pkl.exists() and right_pkl.exists():
