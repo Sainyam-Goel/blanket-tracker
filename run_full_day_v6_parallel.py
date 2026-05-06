@@ -116,6 +116,36 @@ def main():
 
     # Summary
     import numpy as np
+
+    # Post-merge temporal NMS — catches double-fires across segment boundaries
+    nms_suppressed = 0
+    if all_events:
+        per_tbl = {"left": [], "right": []}
+        for e in all_events:
+            tbl = e.get("table", "")
+            if tbl in per_tbl:
+                per_tbl[tbl].append(e)
+        kept_all = []
+        for tbl in ["left", "right"]:
+            evts = sorted(per_tbl[tbl],
+                          key=lambda e: (e["time_sec"], -e.get("v4_prob", 0)))
+            kept = []
+            for e in evts:
+                suppressed = False
+                for k in kept:
+                    if abs(e["time_sec"] - k["time_sec"]) <= 5.0:
+                        if e.get("v4_prob", 0) <= k.get("v4_prob", 0):
+                            suppressed = True
+                            break
+                if not suppressed:
+                    kept.append(e)
+                else:
+                    all_suppressed.append({**e, "reason": "temporal_nms"})
+                    nms_suppressed += 1
+            kept_all.extend(kept)
+        all_events = kept_all
+        print(f"\n  [post-merge NMS] suppressed {nms_suppressed} boundary-crossing events")
+
     L_all = [e for e in all_events if e.get("table") == "left"]
     R_all = [e for e in all_events if e.get("table") == "right"]
 
@@ -126,7 +156,7 @@ def main():
             "total_videos": len(results),
             "duration_sec": round(total_dur, 2),
             "total_frames": total_frames,
-            "version": "v6 (XGBoost per-table + NMS + asym gate)",
+            "version": "v8 (30 features, table_motion + heap_std + cooldown 5s + post-merge NMS)",
             "generated_at": __import__("datetime").datetime.now().isoformat(),
         },
         "segments": segments,
@@ -140,7 +170,7 @@ def main():
         "suppressed_candidates": all_suppressed[:5000],
     }
 
-    out_path = BASE / "taping_fullday_v6.json"
+    out_path = BASE / "taping_fullday_v8.json"
     out_path.write_text(json.dumps(merged, indent=2))
     print(f"\nSaved to {out_path}")
     print(f"Total: {len(all_events)} cycles (L={len(L_all)}, R={len(R_all)}) over {total_dur/3600:.1f} hrs")
