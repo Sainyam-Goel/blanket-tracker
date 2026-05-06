@@ -385,7 +385,9 @@ class LoadDetector:
     def _classify(self, cand):
         from train_load_model_v2 import extract_load_features, FEATURE_NAMES_LOAD
         feats = extract_load_features(cand, list(self.frame_buf), self.fps)
-        feat_vec = np.array([[feats[n] for n in FEATURE_NAMES_LOAD]])
+        # Use only original 13 features until load model retrained with 15
+        feat_names = FEATURE_NAMES_LOAD[:13]
+        feat_vec = np.array([[feats[n] for n in feat_names]])
         prob = float(self.model.predict_proba(feat_vec)[0, 1])
         self.load_prob = prob
         return prob >= 0.50
@@ -1440,7 +1442,7 @@ class TapingCounter:
         # Check for per-table classifiers — prefer v6, fall back through versions.
         # LEFT: v4 preferred (v5/v6 arm-swing negatives regressed afternoon recall).
         # RIGHT: prefer newest model.
-        for ver in ["v6", "v5", "v4"]:
+        for ver in ["v7", "v6", "v5", "v4"]:
             left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
             right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
             if left_pkl.exists() and right_pkl.exists():
