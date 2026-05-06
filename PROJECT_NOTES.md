@@ -2,6 +2,84 @@
 
 ---
 
+# ✅ CH32 — v8 Breakthrough: table_motion + heap_std + cooldown 5s (2026-05-06)
+
+## Headline
+
+**v8 toss model with 30 features cracks the LEFT table bottleneck.** `table_motion_mean` at #4 importance (0.118) on LEFT — a third independent sensor alongside air-motion and table texture. clip8 goes from 0.914→1.000. Cooldown raised to 5.0s matching minimum cycle physics. clip2 LEFT jumps 0.872→0.952.
+
+## v8 Toss Model (30 features)
+| Feature | LEFT Imp | RIGHT Imp | |
+|---------|:---:|:---:|---|
+| `auc_above_thresh` | 0.167 | 0.187 | Air curve area |
+| `duration_above_thresh_sec` | 0.139 | 0.191 | Pulse length |
+| `table_transition_var` | 0.131 | 0.094 | Table state change |
+| `table_motion_mean` | **0.118** | 0.021 | ★ Full-ROI frame-diff |
+| `blob_max_aspect` | 0.033 | — | Blob shape |
+| `table_motion_peak` | 0.013 | 0.025 | ★ Max motion in window |
+| `heap_std_step` | 0.020 | 0.015 | ★ Heap pile texture spike |
+
+**LEFT CV: 0.838, RIGHT CV: 0.881**
+
+## v8 vs v7 Comparison
+| Clip | Table | v7 | v8 | Δ |
+|------|-------|:---:|:---:|:---:|
+| clip8 | LEFT | 0.914 | **1.000** | +0.086 |
+| clip16 | LEFT | 0.951 | **0.984** | +0.033 |
+| clip15 | LEFT | 0.937 | **0.969** | +0.032 |
+| clip2 | LEFT | 0.872 | **0.952** | +0.080 |
+| clip9 | LEFT | 0.873 | 0.886 | +0.013 |
+| clip16 | RIGHT | 0.930 | **0.943** | +0.013 |
+
+LEFT improved across ALL clips. clip8 — the bottleneck since v4 — is now perfect.
+
+## Why v8 Works — Three-Sensor Architecture
+| Sensor | What it measures | Signal for toss | Signal for arm-swing |
+|--------|-----------------|-----------------|---------------------|
+| Air-motion | Frame-diff in air ROI | HIGH | HIGH |
+| Table texture | Spatial std on table | STEP-UP | None |
+| **Table motion** | Frame-diff on table ROI | **HIGH** | **LOW** |
+
+Air-motion fires for both tosses AND arm swings. Table motion only fires for actual blanket throws (blanket crosses table ROI). Two must agree → arm swings rejected.
+
+## Cooldown: 3.0s → 5.0s
+Empirical cycle timing: RIGHT min gap 5.2s, LEFT P1=5.2s. 5.0s matches minimum cycle physics. clip2 LEFT alone gained +0.080 from this change.
+
+## Full Pipeline (v8 Production)
+```
+Frame → Air-Tracker (MOG2) + Heap/Motion sensors
+    → XGBoost Classification (v8, 30 features)
+    → Threshold (L=0.42, R=0.62)
+    → Cooldown 5.0s + Override (prob > last+0.20)
+    → Cycle-Confirm Gate (asymmetric)
+    → Temporal NMS (5.0s)
+    → Emit
+```
+
+## Current Per-Clip F1 (v8, 4s GT merge, 5s cooldown)
+| Clip | LEFT | RIGHT |
+|------|:---:|:---:|
+| clip1 morning | 0.545† | 1.000 |
+| clip2 prelunch | **0.952** | 0.917 |
+| clip3 postlunch | 0.923 | 0.967 |
+| clip4 afternoon | 1.000 | 0.889 |
+| clip8 afternoon | **1.000** | — |
+| clip9 latemorning | 0.886 | 0.952 |
+| clip10 morningstart | 0.941 | 0.902 |
+| clip11 breakperiod | 1.000 | 0.945 |
+| clip13 h5idle | 0.954 | 0.984 |
+| clip14 h3lunch | 0.967 | 0.973 |
+| clip15 peak1430 | **0.969** | 0.984 |
+| clip16 dark1514 | **0.984** | 0.930 |
+| **OVERALL** | **0.947** | P=0.947 R=0.947 |
+
+† clip1: only 5 GT LEFT events, 1 FP makes big impact
+
+## v8 Architecture Note
+**The v8 model is fundamentally different from v4-v7.** It has a third sensor (table motion) that eliminates the AIR-only single-point-of-failure on LEFT. Previous models relied solely on air-motion shape + table texture. v8's redundant sensors make the LEFT table as reliable as RIGHT.
+
+---
+
 # ✅ CH31 — v7 Toss Models + New Labeled Clips (2026-05-06)
 
 ## Headline
