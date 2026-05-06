@@ -1405,10 +1405,10 @@ class TapingCounter:
         self.right_load_det = None
         self.v4_last_load_t = {"left": -1.0, "right": -1.0}
         self._load_frame_ctr = 0
-        self._load_frame_skip = 1  # process load detector every Nth frame
+        self._load_frame_skip = 4  # process load detector every Nth frame
         self._fast_mode = bool(config.get("fast_mode", False))
         if self._fast_mode:
-            self._load_frame_skip = 4  # 4x fewer load detector frames
+            self._load_frame_skip = 4  # already 4 by default
         if self.version == "v4":
             self._load_v4_classifier(config)
             self._init_load_detectors(config)
