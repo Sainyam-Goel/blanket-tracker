@@ -210,7 +210,10 @@ HTML = r"""<!doctype html>
 <script>
 const state = {
   labels: [],
-  selected: null,
+  selected: new Set(),
+  lastClicked: null,
+  highlightRoi: null,
+  highlightTimer: null,
   dirty: false,
   showRois: true,
   rois: {},
@@ -255,13 +258,38 @@ function renderLabels() {
   state.labels.sort((a, b) => a.frame - b.frame || a.type.localeCompare(b.type));
   state.labels.forEach((l, i) => {
     const row = document.createElement("div");
-    row.className = `row ${l.type} ${i === state.selected ? "selected" : ""}`;
+    const sel = state.selected.has(i);
+    row.className = `row ${l.type} ${sel ? "selected" : ""}`;
     const tag = l.type === "left_throw" ? "L▲" : l.type === "right_throw" ? "R▲" : l.type === "scale" ? "SCL" : "LOD";
     row.innerHTML = `<span>● ${l.time_sec.toFixed(2).padStart(7)}s ${tag} f${String(l.frame).padStart(5)}${l.note ? " - " + escapeHtml(l.note) : ""}</span><span></span>`;
-    row.onclick = () => selectLabel(i, false);
-    row.ondblclick = () => selectLabel(i, true);
+    row.onclick = (ev) => {
+      if (ev.shiftKey && state.lastClicked !== null && state.lastClicked !== i) {
+        const lo = Math.min(state.lastClicked, i);
+        const hi = Math.max(state.lastClicked, i);
+        if (!ev.metaKey && !ev.ctrlKey) state.selected.clear();
+        for (let j = lo; j <= hi; j++) state.selected.add(j);
+      } else if (ev.metaKey || ev.ctrlKey) {
+        if (state.selected.has(i)) state.selected.delete(i);
+        else state.selected.add(i);
+      } else {
+        state.selected.clear();
+        state.selected.add(i);
+      }
+      state.lastClicked = i;
+      selectLabel(i, false);
+    };
+    row.ondblclick = () => { selectLabel(i, true); seekFrame(l.frame); };
     labelsEl.appendChild(row);
   });
+  // show bulk-delete button when multiple selected
+  const delBtn = document.getElementById("deleteBtn");
+  if (state.selected.size > 1) {
+    delBtn.textContent = `Delete (${state.selected.size})`;
+    delBtn.style.background = "#ef4444";
+  } else {
+    delBtn.textContent = "Delete";
+    delBtn.style.background = "";
+  }
 }
 
 function escapeHtml(s) {
@@ -269,7 +297,6 @@ function escapeHtml(s) {
 }
 
 function selectLabel(i, jump) {
-  state.selected = i;
   noteInput.value = state.labels[i]?.note || "";
   renderLabels();
   if (jump) seekFrame(state.labels[i].frame);
@@ -287,15 +314,26 @@ function mark(type) {
   };
   state.labels.push(label);
   state.dirty = true;
+  const idx = state.labels.indexOf(label);
+  state.selected.clear();
+  state.selected.add(idx);
+  state.lastClicked = idx;
+  // Flash the corresponding ROI
+  const roiMap = { load: "table", scale: "scale", left_throw: "left_throw", right_throw: "right_throw" };
+  state.highlightRoi = roiMap[type] || null;
+  if (state.highlightTimer) clearTimeout(state.highlightTimer);
+  state.highlightTimer = setTimeout(() => { state.highlightRoi = null; drawOverlay(); }, 400);
   renderLabels();
-  selectLabel(state.labels.indexOf(label), false);
   updateStatus();
 }
 
 function deleteSelected() {
-  if (state.selected === null) return;
-  state.labels.splice(state.selected, 1);
-  state.selected = null;
+  if (state.selected.size === 0) return;
+  // Delete from highest index to lowest to preserve indices
+  const sorted = [...state.selected].sort((a, b) => b - a);
+  for (const i of sorted) state.labels.splice(i, 1);
+  state.selected.clear();
+  state.lastClicked = null;
   noteInput.value = "";
   state.dirty = true;
   renderLabels();
@@ -303,8 +341,9 @@ function deleteSelected() {
 }
 
 function saveNote() {
-  if (state.selected === null) return;
-  state.labels[state.selected].note = noteInput.value.trim();
+  if (state.selected.size === 0) return;
+  const i = [...state.selected][0];
+  state.labels[i].note = noteInput.value.trim();
   state.dirty = true;
   renderLabels();
   updateStatus();
@@ -356,18 +395,23 @@ function drawOverlay() {
   const sx = drawW / state.metadata.width;
   const sy = drawH / state.metadata.height;
   const specs = [
-    ["TABLE", state.rois.table, "#10b981"],
-    ["SCALE", state.rois.scale, "#3b82f6"],
-    ["L-THROW", state.rois.left_throw, "#f59e0b"],
-    ["R-THROW", state.rois.right_throw, "#ef4444"]
+    ["TABLE", state.rois.table, "#10b981", "table"],
+    ["SCALE", state.rois.scale, "#3b82f6", "scale"],
+    ["L-THROW", state.rois.left_throw, "#f59e0b", "left_throw"],
+    ["R-THROW", state.rois.right_throw, "#ef4444", "right_throw"]
   ];
-  for (const [name, roi, color] of specs) {
+  for (const [name, roi, color, key] of specs) {
     const [x1, y1, x2, y2] = roi;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    const isHL = state.highlightRoi === key;
+    ctx.strokeStyle = isHL ? "#ffffff" : color;
+    ctx.lineWidth = isHL ? 3 : 2;
     ctx.strokeRect(offX + x1 * sx, offY + y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy);
-    ctx.fillStyle = color;
-    ctx.font = "13px sans-serif";
+    if (isHL) {
+      ctx.fillStyle = color + "55";
+      ctx.fillRect(offX + x1 * sx, offY + y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy);
+    }
+    ctx.fillStyle = isHL ? "#ffffff" : color;
+    ctx.font = `bold ${isHL ? 14 : 13}px sans-serif`;
     ctx.fillText(name, offX + x1 * sx + 4, offY + y1 * sy + 15);
   }
 }
@@ -384,7 +428,8 @@ function updateStatus(extra = "") {
   const lefts = state.labels.filter(l => l.type === "left_throw").length;
   const rights = state.labels.filter(l => l.type === "right_throw").length;
   const saved = state.dirty ? "UNSAVED CHANGES" : (extra || "saved");
-  statusEl.textContent = `frame ${frame} · ${fmtTime(video.currentTime)} · ${video.paused ? "PAUSED" : "PLAYING"} · ${state.labels.length} labels (load=${loads}, scale=${scales}, L=${lefts}, R=${rights}) · ${saved}`;
+  const selInfo = state.selected.size > 0 ? ` · ${state.selected.size} selected` : "";
+  statusEl.textContent = `frame ${frame} · ${fmtTime(video.currentTime)} · ${video.paused ? "PAUSED" : "PLAYING"} · ${state.labels.length} labels (load=${loads}, scale=${scales}, L=${lefts}, R=${rights})${selInfo} · ${saved}`;
 }
 
 document.getElementById("saveBtn").onclick = saveLabels;
@@ -405,12 +450,14 @@ window.onresize = drawOverlay;
 document.addEventListener("keydown", e => {
   if (document.activeElement === noteInput && !["Escape"].includes(e.key)) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); saveLabels(); return; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") { e.preventDefault(); state.selected = new Set(state.labels.map((_,i)=>i)); state.lastClicked = 0; renderLabels(); updateStatus(); return; }
   if (e.key === " ") { e.preventDefault(); togglePlay(); return; }
   if (e.key.toLowerCase() === "a") { e.preventDefault(); mark("load"); return; }
   if (e.key.toLowerCase() === "d") { e.preventDefault(); mark("scale"); return; }
   if (e.key.toLowerCase() === "z") { e.preventDefault(); mark("left_throw"); return; }
   if (e.key.toLowerCase() === "c") { e.preventDefault(); mark("right_throw"); return; }
   if (e.key.toLowerCase() === "r") { e.preventDefault(); document.getElementById("roiBtn").click(); return; }
+  if (e.key === "Escape") { e.preventDefault(); state.selected.clear(); state.lastClicked = null; renderLabels(); updateStatus(); return; }
   if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); deleteSelected(); return; }
   if (e.key === "Enter") { e.preventDefault(); noteInput.focus(); return; }
   if (e.key === "ArrowRight") { e.preventDefault(); seekFrame(currentFrame() + (e.shiftKey ? Math.round(fps()) : 1)); return; }
