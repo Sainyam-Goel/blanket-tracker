@@ -92,6 +92,24 @@ removes ~104 borderline LEFT events that v8's 0.42 accepted.
 Excluded prob mean = 0.826, air = 5.6 — genuinely weaker signals.
 Balance improved from 1.04→1.00 (perfect). Quality over quantity.
 
+## ❌ v12 Experiment — Ensemble + Precision Features (2026-05-07)
+
+**Attempt:** Ensemble RF+XGB (soft voting) + 3 precision-targeted features
+(pre_toss_stability, heap_response_strength, air_motion_efficiency).
+
+| Metric | v11 XGB (30 feat) | v12 Stack (33 feat) |
+|--------|:---:|:---:|
+| LEFT CV | 0.901 | **0.906** |
+| RIGHT CV | 0.884 | **0.895** |
+| Overall F1 | **0.963** | 0.958 |
+
+CV improved but F1 regressed — soft voting diluted strong single-model
+signals. clip1 LEFT 0.909→0.667, clip2 RIGHT 0.917→0.837 (recall crashes).
+clip17 LEFT improved 0.889→0.923 (FP reduction from new features).
+
+**Conclusion:** Single XGBoost > ensemble for this problem. CV can be misleading
+when post-processing closes the gap. v11 remains the production model.
+
 # ✅ CH35 — v10: Clean GT Training + Version Gate Discovery (2026-05-07)
 
 ## Headline
