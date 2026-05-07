@@ -2,6 +2,95 @@
 
 ---
 
+# ✅ CH37 — CH21 Passing: ROI + Labeler + V1 Training (2026-05-07)
+
+## Headline
+
+**Passing tracker reborn using taping's XGBoost recipe.** ROI calibrator, per-frame web labeler, and V1 classifier trained on 3 clips (82 cycles, CV F1=0.942). Same ML pipeline that took taping from 0.85→0.963.
+
+## ROIs (user-calibrated)
+
+```python
+SCALE_ROI       = (1417, 464, 1614, 670)      # weighing scale platform
+TABLE_ROI       = (1148, 279, 1416, 677)      # folding table surface
+LEFT_THROW_ROI  = (769, 692, 1321, 1079)      # left landing zone (accept)
+RIGHT_THROW_ROI = (1334, 692, 1926, 1081)     # right landing zone (reject)
+```
+
+## Labeler (`passing/gt_labeler_web.py`)
+
+Adapted from taping labeler. Port 8787.
+
+**Keys:** A=load D=scale Z=left_throw C=right_throw
+
+**Features:** Multi-select (Shift+click range, Cmd+A all, bulk delete), ROI flash on keypress (400ms white highlight), Escape to clear selection, Cmd+S save.
+
+**Schema:** `{frame, time_sec, type, note, source, confirmed}` — 4 types (load/scale/left_throw/right_throw), no table field.
+
+**Auto-fix:** Detects moov atom at end of MP4, remuxes with `ffmpeg -c copy -movflags +faststart`.
+
+## Labeled Clips (so far)
+
+| # | Clip | Time | Labels | Accept | Reject |
+|---|------|------|:---:|:---:|:---:|
+| 1 | 1130_1135 | 11:30-11:35 | 4,407 | 30 | 2 |
+| 2 | 1105_1110 | 11:05-11:10 | 2,698 | 9 | 10 |
+| 3 | 1115_1120 | 11:15-11:20 | 4,364 | 22 | 9 |
+| 4-8 | 1145-1435 | pending | — | — | — |
+
+7 more 5-min clips extracted (1145_1150, 1155_1200, 1230_1235, 1330_1335, 1430_1435).
+
+## V1 Classifier (`passing/train_pass_classifier.py`)
+
+**Pipeline:** cluster labels → assemble cycles (load→scale→throw) → extract 9 features → XGBoost binary (accept vs reject).
+
+**Results (3 clips, 82 cycles):**
+| Metric | Score |
+|--------|:---:|
+| CV F1 | 0.942 ± 0.049 |
+| OOF F1 (th=0.58) | 0.966 |
+| LOCO 1130_1135 | 0.947 |
+| LOCO 1105_1110 | 0.000 (reject-heavy, needs more training) |
+
+**Top features:** scale_duration_sec (0.282), throw_span_frames (0.232), load_duration_sec (0.080).
+
+**Model:** `passing/pass_classifier_v1.pkl`
+
+## Physical Process (user description)
+
+1. Far-side worker loads blanket on table (TABLE ROI)
+2. Both fold systematically in organized pattern (TABLE ROI)
+3. Near-side worker places on scale (SCALE ROI)
+4. Tossed left (accept) or right (reject or weight-reject)
+
+**Three cycle types:**
+- Accept: load → scale → left_throw
+- Simple reject: load → right_throw (never touch scale)
+- Weight reject: load → scale → right_throw (weighed, bad weight)
+
+**User observation:** Rejects have excessive time on table (inspection, tag removal).
+
+## Files Created
+
+| File | Purpose |
+|------|---------|
+| `passing/roi_calibrator_web.py` | ROI calibration tool (port 8781) |
+| `passing/gt_labeler_web.py` | Per-frame GT labeler (port 8787) |
+| `passing/train_pass_classifier.py` | Training pipeline |
+| `passing/pass_classifier_v1.pkl` | V1 XGBoost model (82 cycles) |
+| `passing/pass_classifier_metadata.json` | V1 metadata |
+| `passing/clips/` | 8 extracted 5-min clips + labels |
+
+## Next Steps
+
+1. Label remaining 4-5 clips (especially reject-rich ones)
+2. Retrain with video-based features (run blanket_counter in permissive mode to get scale_diff, table_texture per frame)
+3. Add 10-15 video features (texture slope, scale diff AUC, pre-toss stability, etc.)
+4. Build eval pipeline (same as eval_parallel.py)
+5. Full-day run
+
+---
+
 # ✅ CH36 — v11: 20-Clip XGBoost + Version Gate Bug Fix (2026-05-07)
 
 ## Headline

@@ -1,0 +1,40 @@
+{
+  "feature_names": [
+    "load_duration_sec",
+    "load_span_frames",
+    "scale_duration_sec",
+    "scale_span_frames",
+    "has_scale",
+    "load_to_scale_gap_sec",
+    "scale_to_throw_gap_sec",
+    "load_to_throw_gap_sec",
+    "throw_span_frames"
+  ],
+  "n_features": 9,
+  "trained_at": "2026-05-07T23:10:03.453763",
+  "training_clips": [
+    "1105_1110.labels",
+    "1115_1120.labels",
+    "1130_1135.labels"
+  ],
+  "n_samples": 82,
+  "n_accept": 61,
+  "n_reject": 21,
+  "cv_f1_mean": 0.9424335664335665,
+  "cv_f1_std": 0.049014592124056115,
+  "cv_precision_mean": 0.9406593406593406,
+  "cv_recall_mean": 0.95,
+  "feature_importances": {
+    "load_duration_sec": 0.08036111295223236,
+    "load_span_frames": 0.0,
+    "scale_duration_sec": 0.28215137124061584,
+    "scale_span_frames": 0.2666403651237488,
+    "has_scale": 0.0,
+    "load_to_scale_gap_sec": 0.0,
+    "scale_to_throw_gap_sec": 0.06617283821105957,
+    "load_to_throw_gap_sec": 0.07249290496110916,
+    "throw_span_frames": 0.23218142986297607
+  },
+  "model": "XGBClassifier(n_estimators=300, max_depth=6)",
+  "decision_threshold": 0.5800000000000003
+}
