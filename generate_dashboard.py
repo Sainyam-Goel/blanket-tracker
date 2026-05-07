@@ -6,12 +6,12 @@ import os
 import sys
 from datetime import datetime
 
-CH19_JSON = "cutting_fullday.json"
-CH19_V6_JSON = "cutting_fullday_v6.json"   # optional v6-permissive variant
-CH21_JSON = "blanket_fullday.json"
-CH27_JSON = "taping_fullday.json"          # primary (v4 by default as of May 2026)
-CH27_V1_JSON = "taping_fullday_v1.json"     # legacy v1 for delta comparison
-CH27_V2_JSON = "taping_fullday_v2.json"     # legacy v2 for delta comparison
+CH19_JSON = "cutting/cutting_fullday.json"
+CH19_V6_JSON = "cutting/cutting_fullday_v6.json"
+CH21_JSON = "passing/blanket_fullday.json"
+CH27_JSON = "taping/taping_fullday.json"
+CH27_V1_JSON = "taping/taping_fullday_v1.json"
+CH27_V2_JSON = "taping/taping_fullday_v2.json"
 OUTPUT_HTML = "blanket_tracker_dashboard.html"
 
 

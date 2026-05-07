@@ -19,12 +19,13 @@ import xgboost as xgb
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "taping"))
 sys.path.insert(0, str(HERE))
 
 from train_taping_classifier import CLIPS_FOR_TRAINING, cluster_labels
 from taping_counter import LEFT_TABLE_ROI_V2, RIGHT_TABLE_ROI_V2
 
-CLIPS_DIR = HERE / "gt_clips"
+CLIPS_DIR = HERE / "taping" / "gt_clips"
 
 # Table ROI features (non-adaptive — immune to baseline drift)
 FEATURE_NAMES = [

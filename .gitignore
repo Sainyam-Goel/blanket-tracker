@@ -1,23 +1,25 @@
 # Large data files (keep local, too big for GitHub)
 *_fullday.json
-blanket_count_1hr*.json
-cutting_full_v*.json
-blanket_count_1hr_v*_compact.json
-cutting_test.json
-blanket_count_1hr.json
-test_short.json
-cutting_v6_gt.json
-taping_test_*.json
-taping_sample*.json
-Taping Cam27/
+cutting/cutting_full_v*.json
+cutting/cutting_test.json
+cutting/cutting_v6_gt.json
+passing/blanket_count_1hr*.json
+passing/blanket_count_1hr_v*_compact.json
+passing/blanket_count_1hr.json
+passing/blanket_count.json
+passing/blanket_activity.json
+taping/taping_test_*.json
+taping/taping_sample*.json
+taping/test_short.json
+taping/Taping Cam27/
 
 # GT labeling clips (video files too big — but track the labels JSON sidecars)
-gt_clips/*.mp4
-gt_clips/*.v2_detections.json
-# Tracked: gt_clips/*.labels.json (the actual ground-truth output we want versioned)
+taping/gt_clips/*.mp4
+taping/gt_clips/*.v2_detections.json
+# Tracked: taping/gt_clips/*.labels.json (the actual ground-truth output we want versioned)
 
 # Frames and video data
-frames/
+taping/frames/
 
 # OS files
 .DS_Store

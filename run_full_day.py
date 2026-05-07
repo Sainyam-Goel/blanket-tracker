@@ -19,17 +19,17 @@ from pathlib import Path
 from datetime import datetime
 
 BASE = Path(__file__).parent
-DATA = BASE / "frames" / "New Long video data"
+DATA = BASE / "taping" / "frames" / "New Long video data"
 CUTTING_DIR = DATA / "Cutting"
 PASSING_DIR = DATA / "Passing"
-TAPING_DIR  = BASE / "Taping Cam27"   # NVR files are in subdirs (Tape/, Tape 2/, ...)
+TAPING_DIR  = BASE / "taping" / "Taping Cam27"   # NVR files are in subdirs (Tape/, Tape 2/, ...)
 
-CH19_OUTPUT = BASE / "cutting_fullday.json"
-CH19_OUTPUT_V6 = BASE / "cutting_fullday_v6.json"
-CH21_OUTPUT = BASE / "blanket_fullday.json"
-CH27_OUTPUT = BASE / "taping_fullday.json"        # primary (v4 by default as of May 2026)
-CH27_OUTPUT_V1 = BASE / "taping_fullday_v1.json"  # legacy v1 for comparison
-CH27_OUTPUT_V2 = BASE / "taping_fullday_v2.json"  # legacy v2 for comparison
+CH19_OUTPUT = BASE / "cutting" / "cutting_fullday.json"
+CH19_OUTPUT_V6 = BASE / "cutting" / "cutting_fullday_v6.json"
+CH21_OUTPUT = BASE / "passing" / "blanket_fullday.json"
+CH27_OUTPUT = BASE / "taping" / "taping_fullday.json"        # primary
+CH27_OUTPUT_V1 = BASE / "taping" / "taping_fullday_v1.json"  # legacy v1 for comparison
+CH27_OUTPUT_V2 = BASE / "taping" / "taping_fullday_v2.json"  # legacy v2 for comparison
 
 
 def sorted_videos(directory, recursive=False):
@@ -55,6 +55,7 @@ def get_video_duration(path):
 
 def run_ch19(videos, version="v5"):
     """Process all CH19 videos sequentially, merge with time offsets."""
+    sys.path.insert(0, str(BASE / "cutting"))
     sys.path.insert(0, str(BASE))
     from cutting_counter import CuttingCounter
 
@@ -194,6 +195,7 @@ def run_ch19(videos, version="v5"):
 
 def run_ch21(videos):
     """Process all CH21 videos using the native multi-file support."""
+    sys.path.insert(0, str(BASE / "passing"))
     sys.path.insert(0, str(BASE))
     from blanket_counter import BlanketCounter
 
@@ -288,6 +290,7 @@ def run_ch27(videos, frame_step=1, version="v2"):
     v2 algorithm requires consecutive frames for air-motion frame-difference,
     so frame_step=1 is the safe default. v1 tolerates frame_step=2.
     """
+    sys.path.insert(0, str(BASE / "taping"))
     sys.path.insert(0, str(BASE))
     from taping_counter import TapingCounter
 

@@ -20,11 +20,12 @@ VIDEOS = [
 
 def process_segment(args):
     i, rel_path, label = args
-    video_path = BASE / "Taping Cam27" / rel_path
+    video_path = BASE / "taping" / "Taping Cam27" / rel_path
     if not video_path.exists():
         print(f"[{label}] SKIP — file not found: {video_path}")
         return None
 
+    sys.path.insert(0, str(BASE / "taping"))
     sys.path.insert(0, str(BASE))
     from taping_counter import TapingCounter
 
@@ -59,7 +60,7 @@ def process_segment(args):
 def main():
     existing = {}
     for i, (rel_path, label) in enumerate(VIDEOS):
-        video_path = BASE / "Taping Cam27" / rel_path
+        video_path = BASE / "taping" / "Taping Cam27" / rel_path
         if video_path.exists():
             existing[i] = (i, rel_path, label)
             print(f"[{label}] queued")
@@ -170,7 +171,7 @@ def main():
         "suppressed_candidates": all_suppressed[:5000],
     }
 
-    out_path = BASE / "taping_fullday_v11.json"
+    out_path = BASE / "taping" / "taping_fullday_v11.json"
     out_path.write_text(json.dumps(merged, indent=2))
     print(f"\nSaved to {out_path}")
     print(f"Total: {len(all_events)} cycles (L={len(L_all)}, R={len(R_all)}) over {total_dur/3600:.1f} hrs")

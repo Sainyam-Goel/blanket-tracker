@@ -20,11 +20,12 @@ import cv2
 import numpy as np
 
 HERE = Path(__file__).parent
+sys.path.insert(0, str(HERE / "taping"))
 sys.path.insert(0, str(HERE))
 
 from train_taping_classifier import cluster_labels, CLIPS_FOR_TRAINING
 
-CLIPS_DIR = HERE / "gt_clips"
+CLIPS_DIR = HERE / "taping" / "gt_clips"
 FRAMES_AROUND = 5   # ±5 frames around each labeled toss frame
 IDLE_CLIPS = ["gt_clip5_endofday", "gt_clip7_postlunch_return"]
 
