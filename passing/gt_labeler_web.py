@@ -394,9 +394,7 @@ document.getElementById("roiBtn").onclick = () => {
   document.getElementById("roiBtn").textContent = `ROIs: ${state.showRois ? "ON" : "OFF"} (R)`;
   drawOverlay();
 };
-document.getElementById("helpBtn").onclick = () => alert("Keys: ←→ frame ±1 (Shift: ±1s), ↑↓ jump 5s, Space play, A load (table), D scale (weighing), Z left throw, C right throw, R toggle ROIs, Backspace delete, Enter add note, ⌘S save.");
 document.getElementById("noteBtn").onclick = saveNote;
-document.getElementById("confirmBtn").onclick = confirmSelected;
 document.getElementById("deleteBtn").onclick = deleteSelected;
 slider.oninput = () => seekFrame(Number(slider.value));
 video.ontimeupdate = () => { updateStatus(); drawOverlay(); };
@@ -424,7 +422,8 @@ document.addEventListener("keydown", e => {
 loadState().then(() => {
   video.currentTime = 0;
   updateStatus();
-  drawOverlay();
+  video.addEventListener("loadedmetadata", drawOverlay, {once: true});
+  requestAnimationFrame(() => requestAnimationFrame(drawOverlay));
 }).catch(err => {
   statusEl.textContent = err.message;
 });
@@ -463,9 +462,36 @@ class LabelerState:
         cap.release()
         self.duration_sec = self.total_frames / self.fps if self.fps else 0
 
+        self._ensure_faststart()
+
         existing = load_sidecar(self.video_path)
         if existing and existing.get("labels"):
             self.labels = existing["labels"]
+
+    def _ensure_faststart(self):
+        """Check if moov atom is at start of MP4. If not, remux."""
+        import subprocess, shutil, tempfile
+        with open(self.video_path, "rb") as f:
+            head = f.read(200000)
+        if b"moov" in head:
+            return  # already fast-start, nothing to fix
+
+        print(f"[labeler] moov atom at end of file — remuxing with faststart...")
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp.close()
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(self.video_path),
+                 "-c", "copy", "-movflags", "+faststart", tmp.name],
+                capture_output=True, check=True, timeout=300)
+            shutil.move(tmp.name, str(self.video_path))
+            print(f"[labeler] remuxed — moov now at start")
+        except Exception as e:
+            Path(tmp.name).unlink(missing_ok=True)
+            print(f"[labeler] WARNING: faststart remux failed ({e}). "
+                  "Video may stutter in browser. Run manually: "
+                  f"ffmpeg -i {self.video_path.name} -c copy "
+                  "-movflags +faststart output.mp4")
 
     def payload(self):
         with self.lock:
