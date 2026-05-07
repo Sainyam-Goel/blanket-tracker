@@ -19,9 +19,8 @@ from pathlib import Path
 from datetime import datetime
 
 BASE = Path(__file__).parent
-DATA = BASE / "taping" / "frames" / "New Long video data"
-CUTTING_DIR = DATA / "Cutting"
-PASSING_DIR = DATA / "Passing"
+CUTTING_DIR = BASE / "cutting"
+PASSING_DIR = BASE / "passing"
 TAPING_DIR  = BASE / "taping" / "Taping Cam27"   # NVR files are in subdirs (Tape/, Tape 2/, ...)
 
 CH19_OUTPUT = BASE / "cutting" / "cutting_fullday.json"
