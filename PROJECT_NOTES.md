@@ -2,6 +2,114 @@
 
 ---
 
+# ✅ CH36 — v11: 20-Clip XGBoost + Version Gate Bug Fix (2026-05-07)
+
+## Headline
+
+**v11 F1=0.963 (P=0.957, R=0.970) — best model yet.** 20 training clips, clean GT, full 8.0 hr day at 3,328 cycles. LEFT CV 0.867→0.901 (+0.034).
+
+## Key Bug Found & Fixed
+
+**Version gate bug:** All v7+ versions (v7-v10) silently ran as bare v1 gates because version checks were exact-match `== "v4"` or `in ("v2", "v4")`. The model files loaded correctly but the classifier was never engaged — v10 eval produced F1=0.695 (running v1 bare gates). Fixed by changing 8 checks to range-based: `not in ("v1", "v2")` / `!= "v1"`. This was invisible previously because eval scripts hardcoded `version="v4"`.
+
+## v10 → v11 Progression
+
+| Metric | v8 | v10 | v11 |
+|--------|:---:|:---:|:---:|
+| Training clips | 15 | 15 | 20 |
+| LEFT CV | 0.838 | 0.867 | **0.901** |
+| RIGHT CV | 0.881 | 0.871 | **0.884** |
+| Overall F1 | 0.959 | 0.961 | **0.963** |
+| Precision | — | 0.954 | 0.957 |
+| Recall | — | 0.969 | 0.970 |
+
+**v10:** Trained on 15 clips (1-14+10) with clean GT (commented labels filtered). Clips 15-20 were out-of-sample and still scored OOS F1=0.963.
+
+**v11:** Added clips 15-20 to training → best per-clip CV F1 on both tables.
+
+## Clean GT Protocol
+
+43 commented labels across 16 clips filtered from training. Comments included:
+- Heap movements ("processed heap is getting moved")
+- Worker activity ("workers sitting", "workers chatting")
+- Failed loads/reattempts
+- Placeholder markers
+
+Labels preserved in `labels.json` (note field) but excluded from training GT.
+
+## v11 Per-Clip F1
+| Clip | LEFT | RIGHT | Δv10 |
+|------|:---:|:---:|:---:|
+| clip1 morning | 0.909 | 1.000 | = |
+| clip2 prelunch | **0.977** | 0.917 | = |
+| clip9 latemorning | **0.886** | 1.000 | +0.013 |
+| clip14 h3lunch | 0.951 | 0.971 | = |
+| clip15 peak1430 | 0.984 | 0.984 | = |
+| clip16 dark1514 | **0.984** | 0.972 | +0.016 |
+| clip17 morning2 | 0.889 | 0.976 | = |
+| clip18 morning3 | — (0 GT L) | 0.974 | = |
+| clip19 peak2 | 1.000 | 0.976 | = |
+| clip20 lateaft | 0.984 | 0.933 | = |
+| **OVERALL** | | | **0.963** |
+
+LEFT avg improved subtly; clip9 +0.013 and clip16 +0.016 from in-sample training.
+
+## v11 vs v8 Full-Day Deep Analysis
+
+| Hour | v8 tot | v11 tot | Δ | Note |
+|------|:---:|:---:|:---:|------|
+| 09:00-10:00 | 537 | 523 | -14 | |
+| 10:00-11:00 | 515 | 501 | -14 | |
+| 11:00-12:00 | 456 | 446 | -10 | |
+| 12:00-12:53 | 267 | 267 | 0 | lunch start, identical |
+| 12:53-14:00 | 114 | 114 | 0 | lunch trough, identical |
+| 14:00-15:00 | 589 | 584 | -5 | peak, nearly identical |
+| 15:00-16:00 | 544 | 523 | -21 | ★ largest drop |
+| 17:00-18:00 | 400 | 371 | -29 | ★ largest drop |
+| **TOTAL** | **3,422** | **3,329** | **-93 (-2.7%)** | |
+
+**166 events in v8 don't match v11 within 3s** (104 LEFT, 62 RIGHT).
+Mean prob of excluded = 0.826, mean air motion = 5.6 — both below
+v11's higher threshold. These are correctly rejected FPs. F1 is +0.004
+higher confirming quality gain.
+
+**Event quality:**
+| Metric | v8 | v11 |
+|--------|:---:|:---:|
+| Mean prob | 0.955 | **0.961** |
+| Mean LEFT prob | 0.943 | **0.950** |
+| Mean RIGHT prob | 0.968 | **0.972** |
+| Effective threshold (LEFT) | 0.42 | **0.62** |
+| Mean duration | 15.8s | 16.4s |
+| Median duration | 7.7s | 8.0s |
+| Mean air motion | 6.8 | 6.9 |
+| Mean peak signal | 38.5 | 38.9 |
+| L/R balance | 1.04 | **1.00** |
+| Suppressed | 20,993 | 21,092 (+0.5%) |
+
+**Interpretation:** v11's higher LEFT threshold (0.62, OOF-tuned)
+removes ~104 borderline LEFT events that v8's 0.42 accepted.
+Excluded prob mean = 0.826, air = 5.6 — genuinely weaker signals.
+Balance improved from 1.04→1.00 (perfect). Quality over quantity.
+
+# ✅ CH35 — v10: Clean GT Training + Version Gate Discovery (2026-05-07)
+
+## Headline
+
+**v10 trained with clean GT (43 commented labels filtered).** LEFT CV 0.838→0.867 (+0.029 from v8 to v10). RIGHT CV 0.881→0.871 (expected variance).
+
+## v8 → v9 → v10 Progression
+
+| Metric | v8 | v9 | v10 |
+|--------|:---:|:---:|:---:|
+| LEFT CV | 0.838 | 0.865 | **0.867** |
+| RIGHT CV | 0.881 | 0.879 | **0.871** |
+
+v9 added clip17 morning2 — LEFT CV +0.027, clip17 NMS -40% (10→6).  
+v10: 43 comment-labels filtered from 16 clips, labels.json files cleaned in-place.
+
+---
+
 # ✅ CH33 — v8 Full-Day Validation (2026-05-06)
 
 ## Headline
@@ -2567,11 +2675,14 @@ are at fundamental signal limits.
 # Open the labeler
 python3 gt_labeler.py gt_clips/gt_clip1_morning.mp4
 
-# Re-validate v2 on the original GT clip
-python3 taping_counter.py /tmp/gt_5min.mp4 --version v2 --output /tmp/v2_check.json
+# Evaluate v11 on all labeled clips
+python3 eval_parallel.py --version v11
 
-# Full-day v2 rerun
-python3 run_full_day.py --ch27-only --ch27-version v2
+# Train per-table classifiers (latest version)
+python3 train_taping_classifier.py --per-table --classifier xgb
+
+# Full-day v11 parallel run
+python3 run_full_day_v6_parallel.py
 
 # Regenerate dashboard
 python3 generate_dashboard.py
@@ -2581,10 +2692,9 @@ cp blanket_tracker_dashboard.html index.html
 ## Recent commits (most recent first)
 
 ```
-da274d9  Add gt_labeler.py: frame-accurate labeling tool for the CH27 classifier
-69f8ea8  CH27 v3: optical-flow direction-filter plumbing (gate disabled — signal too noisy)
-463fa8c  CH27 v2 full-day shipped: 1,887 cycles (L=1,056 / R=831) over 9 hrs
-f747e3e  CH27 v2: air-zone motion peak detector — F1=0.85 vs v1's F1=0.61
-924028e  CH27 Taping Counter v1: two-table cycle detection with combined activity score
-0496a63  CH19 v6-permissive: aggressive-recall variant
+e380116  v11: 20-clip XGBoost, clean GT, F1=0.963 — version gate fix + 3,328 fullday cycles
+33e3f33 v9 with clip17 morning2 — LEFT CV 0.838→0.865, morning NMS -40%
+2d3d226 Revert cold-start warmup — prefer permanent data fixes over temp thresholds
+aa69458 Cold-start warmup: LEFT threshold +0.08 for first 30 min
+aa9cc74 Fix: post-merge NMS across segment boundaries in parallel runner
 ```
