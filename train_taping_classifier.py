@@ -45,7 +45,13 @@ CLIPS_FOR_TRAINING = [
     "gt_clip12_endofday",          # end-of-day RIGHT-only (374 tosses R, 0 L)
     "gt_clip13_h5idle",            # Hour 5 active — 63 toss windows (L=32, R=31)
     "gt_clip14_h3lunch",           # Hour 3 active — 50 toss windows (L=31, R=19)
-    "gt_clip10_morningstart",      # 09:00-09:10 early morning, 9L+25R (new)
+    "gt_clip10_morningstart",      # 09:00-09:10 early morning, 9L+25R
+    "gt_clip15_peak1430",          # 14:30 peak production, 32L+31R (new)
+    "gt_clip16_dark1514",          # 15:14 dark afternoon, 31L+35R (new)
+    "gt_clip17_morning2",          # 09:30 morning with reattempts, 24L+21R (new)
+    "gt_clip18_morning3",          # 09:30-09:35 morning RIGHT-only, 0L+19R (new)
+    "gt_clip19_peak2",             # peak period RIGHT-heavy, 1L+21R (new)
+    "gt_clip20_lateaft",           # late afternoon LEFT-heavy, 30L+7R (new)
 ]
 CLIP_SKIP = []  # all 8 clips now in CLIPS_FOR_TRAINING
 
@@ -788,8 +794,8 @@ def train_classifier(hold_out="gt_clip4_afternoon_dark", out_dir=HERE):
 # ─────────────────────────────────────────────────────────────────
 
 PER_TABLE_OUT = {
-    "left":  "taping_pulse_classifier_toss_v4_left.pkl",
-    "right": "taping_pulse_classifier_toss_v4_right.pkl",
+    "left":  "taping_pulse_classifier_toss_v11_left.pkl",
+    "right": "taping_pulse_classifier_toss_v11_right.pkl",
 }
 
 LOAD_MODEL_OUT = {

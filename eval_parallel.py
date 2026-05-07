@@ -24,7 +24,8 @@ def merge_windows(windows, min_gap=4.0):
         if cur is not None: result.append(cur)
     return result
 
-def eval_one(clip_name):
+def eval_one(args):
+    clip_name, version = args
     from taping_counter import TapingCounter
     from eval_clips import load_windows
 
@@ -37,7 +38,7 @@ def eval_one(clip_name):
     merged = merge_windows(windows)
 
     t0 = time.time()
-    c = TapingCounter(video, version="v4", fast_mode=True)
+    c = TapingCounter(video, version=version, fast_mode=True)
     result = c.run()
     elapsed = time.time() - t0
     events = result["events"]
@@ -74,14 +75,20 @@ def eval_one(clip_name):
     }
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", default="v11")
+    args = parser.parse_args()
+    version = args.version
+
     labeled = sorted([f.replace('.labels.json', '') for f in os.listdir("gt_clips") if f.endswith('.labels.json')])
     existing = [c for c in labeled if os.path.exists(f"gt_clips/{c}.mp4")]
 
-    print(f"Evaluating {len(existing)} clips in parallel...")
+    print(f"Evaluating {len(existing)} clips with version={version} in parallel...")
     workers = min(cpu_count(), len(existing), 6)  # cap at 6 to avoid memory thrash
 
     with Pool(workers) as pool:
-        results = pool.map(eval_one, existing)
+        results = pool.map(eval_one, [(c, version) for c in existing])
 
     results = [r for r in results if r is not None]
     results.sort(key=lambda r: r["clip"])

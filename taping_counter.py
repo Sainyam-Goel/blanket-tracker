@@ -1273,7 +1273,7 @@ class TapingCounter:
             for k, v in V2_CONFIG.items():
                 config.setdefault(k, v)
         # v4 = v2 candidate-collection (no gates) + classifier post-filter
-        elif self.version == "v4":
+        elif self.version != "v2":
             for k, v in V2_CONFIG.items():
                 config.setdefault(k, v)
             # OVERRIDE the gates so v2 emits every candidate; classifier decides.
@@ -1405,7 +1405,7 @@ class TapingCounter:
         self._fast_mode = bool(config.get("fast_mode", False))
         if self._fast_mode:
             self._load_frame_skip = 4  # already 4 by default
-        if self.version == "v4":
+        if self.version not in ("v1", "v2"):
             self._load_v4_classifier(config)
             self._init_load_detectors(config)
 
@@ -1444,7 +1444,7 @@ class TapingCounter:
         base = Path(__file__).resolve().parent
 
         # Load latest available per-table classifiers (v8 → v7 → fallback)
-        for ver in ["v9", "v8", "v7"]:
+        for ver in ["v11", "v10", "v9", "v8", "v7"]:
             left_pkl = base / f"taping_pulse_classifier_toss_{ver}_left.pkl"
             right_pkl = base / f"taping_pulse_classifier_toss_{ver}_right.pkl"
             if left_pkl.exists() and right_pkl.exists():
@@ -1832,7 +1832,7 @@ class TapingCounter:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration_sec = total_frames / self.fps if self.fps > 0 else 0
 
-        if self.version in ("v2", "v4"):
+        if self.version != "v1":
             # v4 reuses v2 tracker (with lowered thresholds set in __init__);
             # the classifier is applied AFTER each candidate emerges
             self.left  = _TableTrackerV2("left",  self.left_roi,  self.left_air_roi,  self.fps, self.v2_cfg)
@@ -1920,7 +1920,7 @@ class TapingCounter:
 
             paused = self._check_lighting(frame_idx, t_sec, frame_luma)
 
-            if self.version in ("v2", "v4"):
+            if self.version != "v1":
                 # v2 / v4 — common-mode air-motion artifact rejection.
                 # The HEVC keyframe interval (~50 frames) creates synchronized
                 # air-motion spikes in BOTH tables. We pre-compute air motion
@@ -1985,7 +1985,7 @@ class TapingCounter:
                                 print(f"  [{t_sec:6.1f}s] load RIGHT prob={self.right_load_det.load_prob:.2f}")
 
                 # v4.1: populate ring buffer with training-identical dict format
-                if self.version == "v4":
+                if self.version not in ("v1", "v2"):
                     self.v4_frame_buf.append({
                         "frame": frame_idx,
                         "time_sec": round(t_sec, 2),
@@ -2029,7 +2029,7 @@ class TapingCounter:
                     if kind != "event":
                         continue
 
-                    if self.version == "v4":
+                    if self.version not in ("v1", "v2"):
                         tbl = payload["table"]
                         # Cooldown — drop candidates within v4_min_gap
                         if (payload["time_sec"] - self.v4_last_emit_t[tbl]
@@ -2078,7 +2078,7 @@ class TapingCounter:
             # Frame data logging (output only — dashboard signal chart).
             # Classifier uses v4_frame_buf (separate, full-rate ring buffer).
             if frame_idx % self.frame_data_every == 0:
-                if self.version in ("v2", "v4"):
+                if self.version != "v1":
                     self.frame_data.append({
                         "frame": frame_idx,
                         "time_sec": round(t_sec, 2),
@@ -2164,7 +2164,7 @@ class TapingCounter:
             if self.right_load_det.load_last_t > self.v4_last_load_t["right"]:
                 self.v4_last_load_t["right"] = self.right_load_det.load_last_t
         # Flush any remaining batched v4 candidates
-        if self.version == "v4":
+        if self.version not in ("v1", "v2"):
             self._v4_flush_batch()
         elapsed = time.time() - start
         # Apply temporal NMS — suppress weaker events within 5s of stronger ones

@@ -15,7 +15,7 @@ VIDEOS = [
     ("Tape 3/NVR_ch27_main_20260428140012_20260428150012.mp4", "14:00-15:00"),
     ("Tape/NVR_ch27_main_20260428150012_20260428160012.mp4", "15:00-16:00"),
     ("Tape 3/NVR_ch27_main_20260428170012_20260428180012.mp4", "17:00-18:00"),
-    ("Tape 3/NVR_ch27_main_20260428180012_20260428190012.mp4", "18:00-19:00"),
+    ("Tape 2/NVR_ch27_main_20260428180012_20260428190012.mp4", "18:00-19:00"),
 ]
 
 def process_segment(args):
@@ -29,7 +29,7 @@ def process_segment(args):
     from taping_counter import TapingCounter
 
     t0 = time.time()
-    c = TapingCounter(str(video_path), version="v4", fast_mode=True)
+    c = TapingCounter(str(video_path), version="v11", fast_mode=True)
     result = c.run()
     elapsed = time.time() - t0
 
@@ -156,7 +156,7 @@ def main():
             "total_videos": len(results),
             "duration_sec": round(total_dur, 2),
             "total_frames": total_frames,
-            "version": "v8 (30 features, table_motion + heap_std + cooldown 5s + post-merge NMS)",
+            "version": "v11 (30 feat, 20 clips, clean GT, table_motion + heap_std + cooldown 5s + post-merge NMS)",
             "generated_at": __import__("datetime").datetime.now().isoformat(),
         },
         "segments": segments,
@@ -170,7 +170,7 @@ def main():
         "suppressed_candidates": all_suppressed[:5000],
     }
 
-    out_path = BASE / "taping_fullday_v8.json"
+    out_path = BASE / "taping_fullday_v11.json"
     out_path.write_text(json.dumps(merged, indent=2))
     print(f"\nSaved to {out_path}")
     print(f"Total: {len(all_events)} cycles (L={len(L_all)}, R={len(R_all)}) over {total_dur/3600:.1f} hrs")
