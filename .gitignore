@@ -11,7 +11,11 @@ passing/blanket_activity.json
 taping/taping_test_*.json
 taping/taping_sample*.json
 taping/test_short.json
+
+# Video source data (local only, too large for git)
 taping/Taping Cam27/
+cutting/Cutting Full Vid 9hr/
+passing/Passing Full Vid 9hr/
 
 # GT labeling clips (video files too big — but track the labels JSON sidecars)
 taping/gt_clips/*.mp4

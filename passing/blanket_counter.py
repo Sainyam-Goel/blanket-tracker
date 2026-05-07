@@ -39,8 +39,10 @@ from pathlib import Path
 # DETECTION ZONES (for 1920x1080 CH21 camera)
 # ─────────────────────────────────────────────────────────────────
 
-SCALE_ROI = (1440, 440, 1520, 500)   # weighing scale platform (80x60)
-TABLE_ROI = (980, 340, 1240, 450)    # folding table top surface
+SCALE_ROI = (1417, 464, 1614, 670)      # weighing scale platform
+TABLE_ROI = (1148, 279, 1416, 677)      # folding table top surface
+LEFT_THROW_ROI = (769, 692, 1321, 1079)  # left-side landing zone
+RIGHT_THROW_ROI = (1334, 692, 1926, 1081) # right-side landing zone
 
 # ── Scale detection params ──
 SCALE_ON_THRESHOLD = 25        # diff must exceed this to trigger "loaded"
