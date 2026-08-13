@@ -1370,6 +1370,7 @@ class TapingCounter:
         self.v4_min_gap_sec = 5.0  # final cooldown AFTER classifier accepts (~minimum cycle)
         self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
         self.v4_last_emit_prob = {"left": 0.0, "right": 0.0}
+        self.v4_last_emit_idx = {"left": -1, "right": -1}   # index in self.events of last emit
         # Dynamic threshold: if no high-confidence toss in the last N seconds,
         # raise the classifier decision threshold (conservative mode).
         # During active periods: air peaks ~9-10 typical. During breaks:
@@ -1658,16 +1659,28 @@ class TapingCounter:
             # Cooldown gate — enforce min_gap within same batch
             prev_t = self.v4_last_emit_t[tbl]
             if prev_t > 0 and (payload["time_sec"] - prev_t) < self.v4_min_gap_sec:
-                # Cooldown override: if MUCH stronger, arm-swing stole the window.
-                # Update state (correct timestamp) but do NOT emit a duplicate event.
+                # Cooldown override: if MUCH stronger, the previous weaker event
+                # was an arm-swing that stole the window. REPLACE it: remove the
+                # weak event from events and emit the strong one instead.
                 last_prob = self.v4_last_emit_prob.get(tbl, 0)
                 if prob > (last_prob + 0.20):
+                    last_idx = self.v4_last_emit_idx.get(tbl, -1)
+                    if 0 <= last_idx < len(self.events):
+                        weak = self.events.pop(last_idx)
+                        self.suppressed.append({
+                            **weak, "reason": "cooldown_override_replaced",
+                        })
+                    payload["cycle_duration_sec"] = round(
+                        max(0, payload["time_sec"] - max(0, prev_t)), 2)
                     self.v4_last_emit_t[tbl] = payload["time_sec"]
                     self.v4_last_emit_prob[tbl] = prob
-                    self.suppressed.append({
-                        **payload,
-                        "reason": "cooldown_override",
-                    })
+                    self.v4_last_emit_idx[tbl] = len(self.events)
+                    self.events.append(payload)
+                    if self.debug:
+                        print(f"  [{payload['time_sec']:6.1f}s] toss {tbl:5s} "
+                              f"(override: replaced weak @{prev_t:.1f}s) "
+                              f"air_peak={payload['air_motion_peak']:.1f} "
+                              f"prob={prob:.2f}")
                     continue
                 self.suppressed.append({
                     **payload,
@@ -1703,6 +1716,7 @@ class TapingCounter:
                 max(0, payload["time_sec"] - max(0, prev_t)), 2)
             self.v4_last_emit_t[tbl] = payload["time_sec"]
             self.v4_last_emit_prob[tbl] = prob
+            self.v4_last_emit_idx[tbl] = len(self.events)
             self.events.append(payload)
             if self.debug:
                 thresh_str = (f" thr={eff_thresh:.2f}"
@@ -2030,12 +2044,8 @@ class TapingCounter:
                         continue
 
                     if self.version not in ("v1", "v2"):
-                        tbl = payload["table"]
-                        # Cooldown — drop candidates within v4_min_gap
-                        if (payload["time_sec"] - self.v4_last_emit_t[tbl]
-                                < self.v4_min_gap_sec):
-                            continue
-                        # Queue for batch classification
+                        # Queue ALL candidates — cooldown + override handled
+                        # uniformly in _v4_flush_batch (no silent drop).
                         self.v4_pending.append((payload, t_sec))
                         if len(self.v4_pending) >= self.v4_batch_size:
                             self._v4_flush_batch()

@@ -2,6 +2,57 @@
 
 ---
 
+# ✅ CH38 — Taping Deep Analysis: Cooldown Bug Fix + Context Features (2026-05-24)
+
+## Headline
+
+**Found and fixed a real bug in cooldown_override: it was suppressing the REAL toss and keeping the arm-swing FP.** Fix alone: F1 0.963→0.966 (+3 TP, -3 FN, 0 new FP). Context features tested and rejected (no gain).
+
+## The Bug (cooldown_override was backwards)
+
+**Design intent** (CH33 notes): "arm-swing stole the cooldown window" — when a weak arm-swing is emitted first and the real toss arrives within 5s, the real toss should WIN.
+
+**Implementation was inverted**: the strong candidate was added to `suppressed` as `cooldown_override` while the weak arm-swing STAYED in events. Created an FP (arm-swing) + FN (real toss) pair.
+
+**Fix** (`taping_counter.py`):
+- Track `v4_last_emit_idx` (index of last emitted event per table)
+- On override: pop the weak event from `events`, move to suppressed as `cooldown_override_replaced`, emit the strong one
+- Removed the silent pre-queue cooldown drop (candidates within 5s were discarded with bare `continue`, bypassing override logic entirely — only worked within one batch)
+
+## Results
+
+| Version | TP | FP | FN | F1 | P | R |
+|---------|:--:|:--:|:--:|:--:|:--:|:--:|
+| v11 (with bug) | 686 | 31 | 21 | 0.963 | 0.957 | 0.970 |
+| **v11 + bug fix** | **689** | **31** | **18** | **0.966** | 0.957 | 0.975 |
+| v13 (context feats) | 689 | 32 | 18 | 0.965 | 0.956 | 0.975 |
+
+Bug fix recovered 3 real tosses: clip11 LEFT (0.964→0.982), clip9 LEFT (0.886→0.901), clip4 RIGHT (0.889→0.947). Zero new FPs.
+
+## Context Features — REJECTED (tested, no gain)
+
+3 rhythm features added (`time_since_prev_cand_sec`, `cand_count_prev_60s`, `cross_table_cand_prev_30s`) computed from the raw candidate stream (training/inference parity verified). Trained as v13 (36 features = 33 base + 3 context).
+
+- LEFT CV 0.901→0.902, RIGHT CV 0.884→0.878 (flat)
+- Context feature importance: 0.008-0.013 (near-bottom)
+- Eval F1 0.965 vs 0.966 bug-fixed v11 — a wash (helped clip9/13/15, hurt clip1/2)
+- **Verdict: factory rhythm is already implicitly captured by the existing features. Reverted.**
+
+## Also Noted (user's uncommitted confidence experiment)
+
+`air_snr`, `texture_sharpness`, `motion_quality` features + `v11_conf` models exist in working tree (train_confidence_results.json truncated, but LEFT CV 0.9018 vs v11's 0.9010 — no gain). Kept in file, not production.
+
+## Verified NOT Bugs (cleared in deep pass)
+
+- Event timestamp = true air-pulse peak time ✓
+- Training/inference buffer parity (v4_frame_buf vs frame_data, same fields) ✓
+- Candidate air thresholds identical (L=3.0/R=2.0) ✓
+- `_v4_macro_gate` / `_v4_physics_gate`: dead code, never called (intentional)
+- `_v4_conservative_threshold`: inert (boost=0.0)
+- LOCO cluster_f1 in metadata (0.03-0.07): misleading metric, eval F1 is the real number
+
+---
+
 # ✅ CH37 — CH21 Passing: ROI + Labeler + V1 Training (2026-05-07)
 
 ## Headline
