@@ -53,6 +53,57 @@ Bug fix recovered 3 real tosses: clip11 LEFT (0.964→0.982), clip9 LEFT (0.886�
 
 ---
 
+# ✅ CH39 — Taping Bug Hunt Round 2: Cooldown Overwrite + NMS Order (2026-05-24)
+
+## Headline
+
+**Three more real bugs found. F1 0.966→0.967 (FP 31→29, TP/FN unchanged).**
+
+## Bug 1: Cooldown overwrite — the 5.0s cooldown NEVER ran
+
+`__init__` sets `v4_min_gap_sec = 5.0`, but `_load_v4_classifier` (runs later) does
+`self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 3.0))` — default 3.0
+silently overwrote 5.0. **Commit fc807e9 ("Cooldown 3.0s→5.0s") was a no-op**
+— every eval since ran with 3.0s cooldown. Found via debug print showing
+`min_gap=3.0` while investigating why two events 4.5s apart both survived.
+
+## Bug 2: Temporal NMS kept weak-then-strong pairs
+
+Time-ascending sort: weak event kept first, then a STRONGER event in the same
+5s window was also kept (`e.prob <= k.prob` only suppressed when the current
+was weaker). Fix: sort by prob DESC — strongest claims the window first.
+
+## Bug 3: Cycle-confirm gate false-passed with no load
+
+`v4_last_load_t = -1.0` before any load detection → `t - (-1.0)` = `t+1` fell
+inside `[3, max_delay]` for the first ~89s of every clip → borderline tosses
+passed without load confirmation. Fix: require `load_t > 0`.
+
+## Defensive fixes
+
+- `v4_last_emit_idx` off-by-one after override pop (cross-table index shift)
+- Time-based batch flush at 100s — v4_frame_buf holds only 120s; sparse
+  periods could age candidates past their feature window (train/inference
+  mismatch)
+
+## Config comparison (full eval)
+
+| Config | TP | FP | FN | F1 | P | R |
+|--------|:--:|:--:|:--:|:--:|:--:|:--:|
+| 3.0 cd + broken NMS | 689 | 31 | 18 | 0.966 | 0.957 | 0.975 |
+| 3.0 cd + fixed NMS | 675 | 20 | 32 | 0.963 | 0.971 | 0.955 |
+| **5.0 cd + fixed NMS** | **689** | **29** | **18** | **0.967** | **0.960** | **0.975** |
+
+5.0 cooldown + prob-desc NMS is the intended design and wins. Bonus:
+clip11 LEFT → 1.000, clip2 RIGHT 0.917→0.936.
+
+## Remaining 29 FPs / 18 FNs
+
+From clip17 trace: pre-toss movements score 0.97+ — indistinguishable from
+real tosses at the feature level (e.g., event @159.5s prob=0.972 before real
+toss @164.0s prob=0.998). Code-level fixes exhausted; remaining errors need
+GT review (are pre-movements part of the toss?) or accept 0.967 as ceiling.
+
 # ✅ CH37 — CH21 Passing: ROI + Labeler + V1 Training (2026-05-07)
 
 ## Headline
