@@ -1518,7 +1518,7 @@ class TapingCounter:
                 print(f"[v4] single classifier loaded "
                       f"(threshold={self.v4_threshold:.2f})")
 
-        self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 3.0))
+        self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 5.0))
         if self.debug:
             if isinstance(self.v4_classifier, dict):
                 print(f"[v4] per-table classifiers ready "
@@ -1670,6 +1670,11 @@ class TapingCounter:
                         self.suppressed.append({
                             **weak, "reason": "cooldown_override_replaced",
                         })
+                        # popping shifts every later index — fix the OTHER
+                        # table's last-emit index if it pointed past the pop
+                        for t2 in ("left", "right"):
+                            if t2 != tbl and self.v4_last_emit_idx.get(t2, -1) > last_idx:
+                                self.v4_last_emit_idx[t2] -= 1
                     payload["cycle_duration_sec"] = round(
                         max(0, payload["time_sec"] - max(0, prev_t)), 2)
                     self.v4_last_emit_t[tbl] = payload["time_sec"]
@@ -1703,7 +1708,12 @@ class TapingCounter:
                 max_load_delay = 45.0
             if borderline:
                 load_t = self.v4_last_load_t[tbl]
-                load_window = 3.0 <= (payload["time_sec"] - load_t) <= max_load_delay
+                # load_t == -1.0 means NO load ever detected on this table —
+                # must not satisfy the window (old code: t+1 slipped into
+                # [3, max_delay] for the first ~89s and false-passed the gate).
+                load_window = (
+                    load_t > 0
+                    and 3.0 <= (payload["time_sec"] - load_t) <= max_load_delay)
                 if not load_window:
                     self.suppressed.append({
                         **payload,
@@ -2047,7 +2057,11 @@ class TapingCounter:
                         # Queue ALL candidates — cooldown + override handled
                         # uniformly in _v4_flush_batch (no silent drop).
                         self.v4_pending.append((payload, t_sec))
-                        if len(self.v4_pending) >= self.v4_batch_size:
+                        # Flush by count OR by age: v4_frame_buf only holds
+                        # ~120s of frames; older candidates would get truncated
+                        # feature windows (train/inference mismatch).
+                        if (len(self.v4_pending) >= self.v4_batch_size
+                                or (t_sec - self.v4_pending[0][1]) > 100.0):
                             self._v4_flush_batch()
                     else:
                         self.events.append(payload)
@@ -2199,21 +2213,24 @@ class TapingCounter:
         kept_all = []
         nms_suppressed = 0
         for tbl in ["left", "right"]:
+            # Sort by prob DESC: the strongest event claims its 5s window first;
+            # any weaker event (earlier OR later in time) within the window is
+            # suppressed. (Old time-ascending sort kept weak-then-strong pairs.)
             evts = sorted(per_tbl[tbl],
-                          key=lambda e: (e["time_sec"], -e.get("v4_prob", 0)))
+                          key=lambda e: (-e.get("v4_prob", 0), e["time_sec"]))
             kept = []
             for e in evts:
                 suppressed = False
                 for k in kept:
                     if abs(e["time_sec"] - k["time_sec"]) <= window_sec:
-                        if e.get("v4_prob", 0) <= k.get("v4_prob", 0):
-                            suppressed = True
-                            break
+                        suppressed = True
+                        break
                 if not suppressed:
                     kept.append(e)
                 else:
                     self.suppressed.append({**e, "reason": "temporal_nms"})
                     nms_suppressed += 1
+            kept.sort(key=lambda e: e["time_sec"])
             kept_all.extend(kept)
 
         self.events = kept_all
