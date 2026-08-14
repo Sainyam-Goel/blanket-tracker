@@ -71,7 +71,10 @@ def main():
         print("No videos found!")
         return
 
-    workers = min(cpu_count(), len(existing))
+    # Memory-bound: each worker holds ~500MB (frame buffers + HEVC decoder).
+    # 8 workers on an 8GB machine causes swap thrash (observed load 85+, 63MB
+    # free, workers starved to 30% CPU). Cap at 4.
+    workers = min(cpu_count(), len(existing), 4)
     print(f"\nRunning {len(existing)} segments with {workers} parallel workers...\n")
 
     with Pool(workers) as pool:
