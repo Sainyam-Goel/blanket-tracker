@@ -160,7 +160,7 @@ def main():
             "total_videos": len(results),
             "duration_sec": round(total_dur, 2),
             "total_frames": total_frames,
-            "version": "v11 (30 feat, 20 clips, clean GT, table_motion + heap_std + cooldown 5s + post-merge NMS)",
+            "version": "v11 (30 feat, 20 clips, cooldown 4.5s + NMS 4.5s + air-aware override + load v3)",
             "generated_at": __import__("datetime").datetime.now().isoformat(),
         },
         "segments": segments,

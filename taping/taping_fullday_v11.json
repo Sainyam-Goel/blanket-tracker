@@ -5,7 +5,7 @@
     "total_videos": 9,
     "duration_sec": 32375.84,
     "total_frames": 809396,
-    "version": "v11 (30 feat, 20 clips, clean GT, table_motion + heap_std + cooldown 5s + post-merge NMS)",
+    "version": "v11 (30 feat, 20 clips, cooldown 4.5s + NMS 4.5s + air-aware override + load v3)",
     "generated_at": "2026-08-15T02:22:06.409247"
   },
   "segments": [
