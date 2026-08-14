@@ -2,6 +2,61 @@
 
 ---
 
+# ✅ CH41 — Taping: Dense-Clip Cooldown Fix + Air-Aware Override (2026-08-15)
+
+## Headline
+
+**F1 0.967 → 0.968 (TP=688, FP=27, FN=19).** Found the dense-clip tension:
+GT min cycle is 5.2s but model timestamp jitter (±0.3s) compresses real
+toss pairs to 4.6-4.8s — the 5.0s cooldown was suppressing the SECOND real
+toss in dense peaks (clip1 regression: 5 GT tosses at 272/278/284/290/295).
+
+## Final Production Config
+
+| Parameter | Old | New |
+|-----------|-----|-----|
+| Cooldown (`v4_min_gap_sec`) | 5.0s | **4.5s** |
+| Temporal NMS window | 5.0s | **4.5s** |
+| Cooldown override | +0.20 prob margin | **air-aware** |
+| Load model | v2 (14 clips) | **v3 (20 clips)** |
+
+## Air-Aware Override
+
+Replace the emitted event when newcomer is clearly stronger:
+`prob > last_prob + 0.05 OR (prob > last_prob AND air > last_air × 1.4)`.
+
+Pre-movement air ≈ 5-6 vs real toss air ≈ 9-12 — the air condition
+separates them. Pure prob-swap regressed recall (0.957); +0.20 kept
+pre-movement FPs (clip17).
+
+## Load Model v3
+
+20 clips. LEFT CV 0.822→**0.883** (+0.061), RIGHT 0.926. Loader chain v3→v2→v1.
+
+## Config Matrix (full eval)
+
+| Config | TP | FP | FN | F1 |
+|--------|:--:|:--:|:--:|:--:|
+| 5.0cd + NMS5 + +0.20 | 689 | 29 | 18 | 0.967 |
+| 5.0cd + NMS5 + prob-swap | 670 | 23 | 37 | 0.957 |
+| 5.0cd + NMS5 + air override | 680 | 23 | 27 | 0.965 |
+| **4.5cd + NMS4.5 + air override** | **688** | **27** | **19** | **0.968** |
+
+## Remaining 27 FPs / 19 FNs
+
+clip10 RIGHT FPs analyzed: prob 0.92-0.999, sandwiched between TPs at
+5-8s gaps — feature-indistinguishable from real tosses. Likely GT misses
+or rethrow attempts; need human video review. User's labeling convention:
+"pre-movements ARE part of toss" — some FPs near GT windows may be
+unlabeled pre-movements.
+
+## Fullday (fixed pipeline)
+
+3,573 cycles (L=1,794, R=1,779) over 9.0 hrs, all 9 segments incl.
+18:00-19:00 (276 cycles). Common 8 segments: 3,308 vs old buggy 3,328
+(-0.6% — NMS double-fire cleanup). Worker cap 4 (8 workers on 8GB
+machine = swap thrash, load 85+).
+
 # ✅ CH38 — Taping Deep Analysis: Cooldown Bug Fix + Context Features (2026-05-24)
 
 ## Headline
