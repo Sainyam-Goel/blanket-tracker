@@ -470,7 +470,7 @@ def main():
         # Save
         import joblib
         tbl_key = "left" if name == "LEFT" else "right"
-        pkl_path = HERE / f"taping_load_texture_classifier_v1_{tbl_key}.pkl"
+        pkl_path = HERE / f"taping_load_texture_classifier_v3_{tbl_key}.pkl"
         joblib.dump(clf, pkl_path, compress=3)
         print(f"\n  [saved] {pkl_path.name}")
 

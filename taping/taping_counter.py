@@ -1370,9 +1370,12 @@ class TapingCounter:
         self.v4_classifier = None
         self.v4_threshold = 0.5
         self.v4_feature_names = None
-        self.v4_min_gap_sec = 5.0  # final cooldown AFTER classifier accepts (~minimum cycle)
+        self.v4_min_gap_sec = 4.5  # cooldown AFTER classifier accepts. GT min cycle 5.2s;
+                                   # model timestamp jitter (±0.3s) compresses real pairs
+                                   # to ~4.6s+ — 5.0s was suppressing real dense tosses.
         self.v4_last_emit_t = {"left": -1e9, "right": -1e9}
         self.v4_last_emit_prob = {"left": 0.0, "right": 0.0}
+        self.v4_last_emit_air = {"left": 0.0, "right": 0.0}   # air peak of last emit
         self.v4_last_emit_idx = {"left": -1, "right": -1}   # index in self.events of last emit
         # Dynamic threshold: if no high-confidence toss in the last N seconds,
         # raise the classifier decision threshold (conservative mode).
@@ -1414,12 +1417,15 @@ class TapingCounter:
     def _init_load_detectors(self, config):
         from pathlib import Path
         base = Path(__file__).resolve().parent
-        left_pkl = base / "taping_load_texture_classifier_v2_left.pkl"
-        right_pkl = base / "taping_load_texture_classifier_v2_right.pkl"
-        if not (left_pkl.exists() and right_pkl.exists()):
-            left_pkl = base / "taping_load_texture_classifier_v1_left.pkl"
-            right_pkl = base / "taping_load_texture_classifier_v1_right.pkl"
-        if left_pkl.exists() and right_pkl.exists():
+        left_pkl = None
+        right_pkl = None
+        for ver in ["v3", "v2", "v1"]:
+            l = base / f"taping_load_texture_classifier_{ver}_left.pkl"
+            r = base / f"taping_load_texture_classifier_{ver}_right.pkl"
+            if l.exists() and r.exists():
+                left_pkl, right_pkl = l, r
+                break
+        if left_pkl and right_pkl and left_pkl.exists() and right_pkl.exists():
             self.left_load_det = LoadDetector(
                 "left", str(left_pkl), self.left_roi, LEFT_LANDING_ZONE, self.fps)
             self.right_load_det = LoadDetector(
@@ -1519,7 +1525,7 @@ class TapingCounter:
                 print(f"[v4] single classifier loaded "
                       f"(threshold={self.v4_threshold:.2f})")
 
-        self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 5.0))
+        self.v4_min_gap_sec = float(config.get("v4_min_gap_sec", 4.5))
         if self.debug:
             if isinstance(self.v4_classifier, dict):
                 print(f"[v4] per-table classifiers ready "
@@ -1660,11 +1666,20 @@ class TapingCounter:
             # Cooldown gate — enforce min_gap within same batch
             prev_t = self.v4_last_emit_t[tbl]
             if prev_t > 0 and (payload["time_sec"] - prev_t) < self.v4_min_gap_sec:
-                # Cooldown override: if MUCH stronger, the previous weaker event
-                # was an arm-swing that stole the window. REPLACE it: remove the
-                # weak event from events and emit the strong one instead.
+                # Cooldown override: within the 5s window at most ONE event can
+                # be a real toss (physics: min cycle 5.2s). Replace the weaker
+                # emitted event when the newcomer is clearly stronger:
+                #   - prob margin ≥ +0.05 (arm-swing → toss), OR
+                #   - strictly stronger prob AND ≥1.4× air peak (pre-movement
+                #     air≈5-6 → real toss air≈9-12; noise air stays low).
+                # Pure prob-only swap regressed recall (noise replaced tosses).
                 last_prob = self.v4_last_emit_prob.get(tbl, 0)
-                if prob > (last_prob + 0.20):
+                last_air = max(1.0, self.v4_last_emit_air.get(tbl, 0.0))
+                this_air = float(payload.get("air_motion_peak", 0.0))
+                override_ok = (
+                    prob > last_prob + 0.05
+                    or (prob > last_prob and this_air > last_air * 1.4))
+                if override_ok:
                     last_idx = self.v4_last_emit_idx.get(tbl, -1)
                     if 0 <= last_idx < len(self.events):
                         weak = self.events.pop(last_idx)
@@ -1680,6 +1695,7 @@ class TapingCounter:
                         max(0, payload["time_sec"] - max(0, prev_t)), 2)
                     self.v4_last_emit_t[tbl] = payload["time_sec"]
                     self.v4_last_emit_prob[tbl] = prob
+                    self.v4_last_emit_air[tbl] = this_air
                     self.v4_last_emit_idx[tbl] = len(self.events)
                     self.events.append(payload)
                     if self.debug:
@@ -1727,6 +1743,7 @@ class TapingCounter:
                 max(0, payload["time_sec"] - max(0, prev_t)), 2)
             self.v4_last_emit_t[tbl] = payload["time_sec"]
             self.v4_last_emit_prob[tbl] = prob
+            self.v4_last_emit_air[tbl] = float(payload.get("air_motion_peak", 0.0))
             self.v4_last_emit_idx[tbl] = len(self.events)
             self.events.append(payload)
             if self.debug:
@@ -2205,7 +2222,7 @@ class TapingCounter:
 
         return self._build_results(frame_idx, duration_sec, elapsed)
 
-    def _apply_temporal_nms(self, window_sec=5.0):
+    def _apply_temporal_nms(self, window_sec=4.5):
         """Suppress events within window_sec of a stronger one on the same table.
 
         Sorts events by time, keeps the highest-prob event within each 5s window.
