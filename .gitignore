@@ -31,3 +31,4 @@ taping/frames/
 
 # Generated artifacts
 *.pdf
+.claude/
